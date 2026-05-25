@@ -24,7 +24,7 @@
 
 (defun reg# (reg)
   (if (is-rip reg)
-      (+ (get-program-counter) 8)
+      (+ (get-program-counter) (get-instruction-length))
     reg))
 
 (defun load-mem (reg off)
