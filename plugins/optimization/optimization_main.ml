@@ -160,10 +160,15 @@ let run level proj =
   Project.map_program proj ~f:(fun prog ->
       let free = free_vars prog in
       Term.map sub_t prog ~f:(fun sub ->
-          let data = process_sub free can_touch sub in
-          let sub = O.update sub data in
-          let data = O.find_unreachable sub data in
-          O.remove_dead_code sub data))
+          let digest = digest_of_sub sub level in
+          match O.Cache.load digest with
+          | Some data -> O.apply sub data
+          | None ->
+              let data = process_sub free can_touch sub in
+              let sub = O.update sub data in
+              let data = O.find_unreachable sub data in
+              O.Cache.save digest data;
+              O.remove_dead_code sub data))
 
 let () =
   Config.manpage
@@ -220,4 +225,5 @@ let () =
     ~provides:[ "pass"; "optimization"; "analysis"; "simplification" ]
     (fun { Config.get = ( ! ) } ->
       if !level > 0 then
-        Project.register_pass ~deps:[ "api" ] ~autorun:true (run !level))
+        Project.register_pass ~deps:[ "api" ] ~runonce:false ~autorun:true
+          (run !level))
