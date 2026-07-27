@@ -9,6 +9,115 @@ open X86_utils
 open X86_env
 include Self ()
 
+(* Per-lift cache mapping a memory operand's addressing signature to its
+   symbolized address. The same memory operand is lifted twice for a
+   read-modify-write (load address and store address); those two address
+   expressions may be structurally unequal (e.g. one carries a trailing +0),
+   but they share the same (base, index, scale, displacement) signature, so
+   keying on that signature yields ONE shared displacement IMM var. Two
+   distinct operands keep distinct vars even when their displacement values
+   coincide (e.g. add [rax+1],[rbx+1]). Cleared at the start of each lift. *)
+type disp_key = string option * string option * int option * int64 option
+let disp_cache : (disp_key, Bil.exp) Hashtbl.Poly.t = Hashtbl.Poly.create ()
+
+(* Helper to create an IMM virtual variable *)
+let imm_var width = Bil.Var (Var.create ~is_virtual:true "IMM" (Type.Imm width))
+
+(* Find the displacement Int in an address expression. The address is built as
+   base + index*scale + disp. The displacement is the Int addend of a
+   PLUS/MINUS whose sibling is the base/scaled-index part; a trailing +0 (from
+   lifting normalization) and the scale shift (inside LSHIFT) are excluded.
+   Returns None when there is no displacement (e.g. [rax], [rax+rcx*4], [rip]). *)
+let rec find_disp_node = function
+  | BinOp (op, e1, e2)
+    when [%compare.equal: binop] op PLUS || [%compare.equal: binop] op MINUS ->
+      (match find_disp_node e1 with
+       | Some _ as r -> r
+       | None ->
+           (match find_disp_node e2 with
+            | Some _ as r -> r
+            | None ->
+                (* No nested displacement: the displacement is the Int addend
+                   of this sum (preferring e1, then e2). A trailing +0 is never
+                   picked because find_disp_node already descended into the
+                   base part. *)
+                match e1 with
+                | Int _ -> Some e1
+                | _ ->
+                    (match e2 with
+                     | Int _ -> Some e2
+                     | _ -> None)))
+  | _ -> None
+
+(* Rebuild exp, substituting the exact displacement Int node (matched by
+   physical identity) with the given variable. *)
+let rec replace_disp_node target var = function
+  | e when phys_equal e target -> var
+  | BinOp (op, e1, e2) ->
+      BinOp (op, replace_disp_node target var e1, replace_disp_node target var e2)
+  | Load (m, a, en, sz) ->
+      Load (m, replace_disp_node target var a, en, sz)
+  | Store (m, a, d, en, sz) ->
+      Store (m, replace_disp_node target var a, replace_disp_node target var d, en, sz)
+  | Cast (k, n, e) -> Cast (k, n, replace_disp_node target var e)
+  | UnOp (op, e) -> UnOp (op, replace_disp_node target var e)
+  | Extract (hi, lo, e) -> Extract (hi, lo, replace_disp_node target var e)
+  | Concat (e1, e2) -> Concat (replace_disp_node target var e1, replace_disp_node target var e2)
+  | Let (v, e1, e2) -> Let (v, replace_disp_node target var e1, replace_disp_node target var e2)
+  | Ite (c, t, f) -> Ite (replace_disp_node target var c, replace_disp_node target var t, replace_disp_node target var f)
+  | e -> e
+
+(* Walk an address collecting (base register name, index register name, scale
+   shift). The scale is the LSHIFT shift operand; the base is the register
+   added directly (not inside the scale). The displacement, scale-shift
+   constant, and trailing +0 are not collected here. *)
+let rec collect_bis a (base, index, scale) =
+  match a with
+  | Var v -> (Some (Var.name v), index, scale)
+  | BinOp (LSHIFT, Var v, Int s) ->
+      (base, Some (Var.name v), Some (Word.to_int_exn (Word.signed s)))
+  | BinOp (LSHIFT, _, _) -> (base, index, scale)
+  | BinOp (_, x, y) -> collect_bis y (collect_bis x (base, index, scale))
+  | Cast (_, _, e) | UnOp (_, e) | Extract (_, _, e)
+  | Concat (e, _) | Ite (_, e, _) | Let (_, _, e) ->
+      collect_bis e (base, index, scale)
+  | Load (_, e, _, _) | Store (_, e, _, _, _) -> collect_bis e (base, index, scale)
+  | _ -> (base, index, scale)
+
+let int64_of_word w = Or_error.ok_exn (Word.to_int64 (Word.signed w))
+
+(* Addressing signature of an expression: (base, index, scale, displacement).
+   For a bare Int (moffs) the displacement is the whole value and base is None. *)
+let addr_key a =
+  let dv =
+    match find_disp_node a with
+    | Some (Int d) -> Some (int64_of_word d)
+    | _ -> (match a with Int d -> Some (int64_of_word d) | _ -> None)
+  in
+  let (base, index, scale) = collect_bis a (None, None, None) in
+  (base, index, scale, dv)
+
+(* Symbolize the displacement (or moffs offset) of an address expression,
+   sharing the resulting IMM var across all uses of the same memory operand
+   (matched by addr_key) via disp_cache. *)
+  let symbolize_addr a =
+    let key = addr_key a in
+    match Hashtbl.Poly.find disp_cache key with
+    | Some ca -> ca
+   | None ->
+       let ca =
+         match a with
+         | Int d -> imm_var (Word.bitwidth d)
+         | _ ->
+             (match find_disp_node a with
+              | Some (Int d as dnode) ->
+                  replace_disp_node dnode (imm_var (Word.bitwidth d)) a
+              | Some _ | None -> a)
+       in
+       Hashtbl.Poly.set disp_cache ~key ~data:ca;
+       ca
+
+
 module ToIR = struct
   let cf_e = Bil.var cf
   let pf_e = Bil.var pf
@@ -55,7 +164,7 @@ module ToIR = struct
     (* There is no 32-bit extension of segment selectors; this is not a bug *)
     | Oseg r when t = reg16_t -> (bits2segrege r, t)
     | Oseg _ -> (disfailwith mode "Segment register when t is not r16", t)
-    | Oaddr e -> (load_s mode ss (size_of_typ t) e, t)
+    | Oaddr e -> (load_s mode ss (size_of_typ t) (symbolize_addr e), t)
     | Oimm i -> Bil.(Var (Var.create ~is_virtual:true "IMM" t), t)
 
   let op2e_s mode ss has_rex t operand =
@@ -78,7 +187,7 @@ module ToIR = struct
     (* There is no 32-bit extension of segment selectors; this is not a bug *)
     | Oseg r when t = reg16_t -> bits2segrege r
     | Oseg _ -> disfailwith mode "Segment register when t is not r16"
-    | Oaddr e -> load_s mode ss (size_of_typ t) e
+    | Oaddr e -> load_s mode ss (size_of_typ t) (symbolize_addr e)
     | Oimm i -> Bil.(Var (Var.create ~is_virtual:true "IMM" t))
 
   let assn_s mode s has_rex has_vex t v e =
@@ -136,7 +245,7 @@ module ToIR = struct
         Bil.Move (v, e)
     | Oseg _, _ ->
         disfailwith mode "Can't assign to non 16 bit segment register"
-    | Oaddr a, _ -> store_s mode s t a e
+    | Oaddr a, _ -> store_s mode s t (symbolize_addr a) e
     | Oimm _, _ ->
         disfailwith mode "disasm x86: Can't assign to an immediate value"
 
@@ -513,7 +622,7 @@ module ToIR = struct
         let s, al =
           match s with
           | Ovec _ | Oreg _ -> (op2e ts s, [])
-          | Oaddr a -> (op2e ts s, [ a ])
+          | Oaddr a -> (op2e ts s, [ symbolize_addr a ])
           | Oimm _ | Oseg _ -> disfailwith "invalid source operand for movdq"
         in
         let d, al =
@@ -521,7 +630,7 @@ module ToIR = struct
           (* Behavior is to clear the xmm bits *)
           | Ovec _ -> (assn td d Bil.(Cast (UNSIGNED, !!td, s)), al)
           | Oreg _ -> (assn td d s, al)
-          | Oaddr a -> (assn td d s, a :: al)
+          | Oaddr a -> (assn td d s, symbolize_addr a :: al)
           | Oimm _ | Oseg _ -> disfailwith "invalid dest operand for movdq"
         in
         (* sources tell me that movdqa raises a general protection exception
@@ -643,7 +752,7 @@ module ToIR = struct
         let src =
           match src with
           | Ovec _ -> op2e t src
-          | Oaddr a -> load (size_of_typ t) a
+          | Oaddr a -> load (size_of_typ t) (symbolize_addr a)
           | Oreg _ | Oimm _ | Oseg _ -> disfailwith "invalid"
         in
         let vsrc = Option.value ~default:dst vsrc in
@@ -1099,7 +1208,7 @@ module ToIR = struct
               let word_size = width_of_mode mode in
               let zero = Bil.int (Word.zero word_size) in
               let oxf = Bil.int (Word.of_int ~width:word_size 0xf) in
-              [ Bil.(if_ (oxf land addr <> zero) [ cpuexn 13 ] []) ]
+              [ Bil.(if_ (oxf land symbolize_addr addr <> zero) [ cpuexn 13 ] []) ]
           | _ -> []
         in
 
@@ -1129,14 +1238,16 @@ module ToIR = struct
                   ]);
             [ assn exp_type dst_op (Bil.var tmp_dst) ];
           ]
-    | Lea (t, r, a) when List.is_empty pref ->
-        (* See Table 3-64 *)
-        (* previously, it checked whether addrbits > opbits before the cast_low.
-       * The conclusion we came to was that
-         - if they were equal, the cast is basically a nop
-         - if it was the other way round, you want to extend it anyway.
-       * (I may be remembering things wrongly) *)
-        [ assn t r Bil.(Cast (LOW, !!t, a)) ]
+     | Lea (t, r, a) when List.is_empty pref ->
+         (* See Table 3-64 *)
+         (* previously, it checked whether addrbits > opbits before the cast_low.
+        * The conclusion we came to was that
+          - if they were equal, the cast is basically a nop
+          - if it was the other way round, you want to extend it anyway.
+        * (I may be remembering things wrongly) *)
+         (* Symbolize the displacement/moffs offset in the computed address so
+            that LEA participates in the sym-imm scheme like real loads/stores. *)
+         [ assn t r Bil.(Cast (LOW, !!t, symbolize_addr a)) ]
     | Call (o1, ra) -> (
         (* If o1 is an immediate, we should syntactically have Jump(imm)
          so that the CFG algorithm knows where the jump goes.  Otherwise
@@ -1334,7 +1445,7 @@ module ToIR = struct
           | Oaddr a ->
               let offset = Bil.(cast unsigned (width_of_mode mode) offset) in
               let byte =
-                load (size_of_typ reg8_t) Bil.(a + (offset lsr int_exp 3 t'))
+                load (size_of_typ reg8_t) Bil.(symbolize_addr a + (offset lsr int_exp 3 t'))
               in
               let shift = Bil.(Cast (LOW, !!reg8_t, offset) land int_exp 7 8) in
               (byte, shift)
@@ -1408,7 +1519,7 @@ module ToIR = struct
     | Stmxcsr dst ->
         let dst =
           match dst with
-          | Oaddr addr -> addr
+          | Oaddr addr -> symbolize_addr addr
           | _ -> disfailwith "stmxcsr argument cannot be non-memory"
         in
         [
@@ -1417,21 +1528,21 @@ module ToIR = struct
     | Ldmxcsr src ->
         let src =
           match src with
-          | Oaddr addr -> addr
+          | Oaddr addr -> symbolize_addr addr
           | _ -> disfailwith "ldmxcsr argument cannot be non-memory"
         in
         [ Bil.Move (mxcsr, load (size_of_typ reg32_t) src) ]
     | Fnstcw dst ->
         let dst =
           match dst with
-          | Oaddr addr -> addr
+          | Oaddr addr -> symbolize_addr addr
           | _ -> disfailwith "fnstcw argument cannot be non-memory"
         in
         [ store reg16_t dst (Bil.Var fpu_ctrl) ]
     | Fldcw src ->
         let src =
           match src with
-          | Oaddr addr -> addr
+          | Oaddr addr -> symbolize_addr addr
           | _ -> disfailwith "fldcw argument cannot be non-memory"
         in
         [ Bil.Move (fpu_ctrl, load (size_of_typ reg16_t) src) ]
@@ -1938,6 +2049,9 @@ let disasm_instr mode mem addr =
 let insn arch mem insn =
   let mode = match arch with `x86 -> X86 | `x86_64 -> X8664 in
   let addr = Memory.min_addr mem in
+  (* Fresh displacement-cache for this lift so each instruction gets its own
+     (independent) displacement IMM vars. *)
+  Hashtbl.Poly.clear disp_cache;
   match disasm_instr mode mem addr with
   | exception No_semantics -> Ok []
   | exception Arch_exception (_, msg) ->

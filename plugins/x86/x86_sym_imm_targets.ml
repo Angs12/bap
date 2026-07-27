@@ -18,5 +18,8 @@ end
 
 module IA32SI = X86_backend.IA32.Make (IA32SI_D)
 module AMD64SI = X86_backend.AMD64.Make (AMD64SI_D)
-module IA32SI_M = X86_backend.IA32.Make (IA32SI_L)
-module AMD64SI_M = X86_backend.AMD64.Make (AMD64SI_L)
+
+(* Bypass the shared backend table so the monolithic sym-imm lifter handles all opcodes.
+   This makes operand immediates and moffs offsets symbolic via op2e_s/assn_s (Oimm -> Var IMM). *)
+module IA32SI_M = IA32SI_L
+module AMD64SI_M = AMD64SI_L
