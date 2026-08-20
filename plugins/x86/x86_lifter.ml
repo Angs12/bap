@@ -55,7 +55,7 @@ module ToIR = struct
     (* There is no 32-bit extension of segment selectors; this is not a bug *)
     | Oseg r when t = reg16_t -> (bits2segrege r, t)
     | Oseg _ -> (disfailwith mode "Segment register when t is not r16", t)
-    | Oaddr e -> (load_s mode ss (size_of_typ t) e, t)
+    | (Oaddr e | Oaddr_rip_relative e) -> (load_s mode ss (size_of_typ t) e, t)
     | Oimm i -> Bil.(Int (resize_word i !!t), t)
 
   let op2e_s mode ss has_rex t operand =
@@ -78,7 +78,7 @@ module ToIR = struct
     (* There is no 32-bit extension of segment selectors; this is not a bug *)
     | Oseg r when t = reg16_t -> bits2segrege r
     | Oseg _ -> disfailwith mode "Segment register when t is not r16"
-    | Oaddr e -> load_s mode ss (size_of_typ t) e
+    | (Oaddr e | Oaddr_rip_relative e) -> load_s mode ss (size_of_typ t) e
     | Oimm i -> Bil.Int (resize_word i !!t)
 
   let assn_s mode s has_rex has_vex t v e =
@@ -136,7 +136,7 @@ module ToIR = struct
         Bil.Move (v, e)
     | Oseg _, _ ->
         disfailwith mode "Can't assign to non 16 bit segment register"
-    | Oaddr a, _ -> store_s mode s t a e
+    | (Oaddr a | Oaddr_rip_relative a), _ -> store_s mode s t a e
     | Oimm _, _ ->
         disfailwith mode "disasm x86: Can't assign to an immediate value"
 
@@ -513,7 +513,7 @@ module ToIR = struct
         let s, al =
           match s with
           | Ovec _ | Oreg _ -> (op2e ts s, [])
-          | Oaddr a -> (op2e ts s, [ a ])
+          | (Oaddr a | Oaddr_rip_relative a) -> (op2e ts s, [ a ])
           | Oimm _ | Oseg _ -> disfailwith "invalid source operand for movdq"
         in
         let d, al =
@@ -521,7 +521,7 @@ module ToIR = struct
           (* Behavior is to clear the xmm bits *)
           | Ovec _ -> (assn td d Bil.(Cast (UNSIGNED, !!td, s)), al)
           | Oreg _ -> (assn td d s, al)
-          | Oaddr a -> (assn td d s, a :: al)
+          | (Oaddr a | Oaddr_rip_relative a) -> (assn td d s, a :: al)
           | Oimm _ | Oseg _ -> disfailwith "invalid dest operand for movdq"
         in
         (* sources tell me that movdqa raises a general protection exception
@@ -643,7 +643,7 @@ module ToIR = struct
         let src =
           match src with
           | Ovec _ -> op2e t src
-          | Oaddr a -> load (size_of_typ t) a
+          | (Oaddr a | Oaddr_rip_relative a) -> load (size_of_typ t) a
           | Oreg _ | Oimm _ | Oseg _ -> disfailwith "invalid"
         in
         let vsrc = Option.value ~default:dst vsrc in
@@ -752,7 +752,7 @@ module ToIR = struct
         let im i = Bil.Int (int_of_mode mode i) in
         let addresses =
           List.fold
-            ~f:(fun acc -> function Oaddr a -> a :: acc | _ -> acc)
+            ~f:(fun acc -> function (Oaddr a | Oaddr_rip_relative a) -> a :: acc | _ -> acc)
             ~init:[] [ src; dst ]
         in
         (* Palignr seems to cause a CPU general protection exception if this fails.
@@ -1095,7 +1095,7 @@ module ToIR = struct
 
         let check_mem_alignment =
           match src_op with
-          | Oaddr addr when op_size = 128 ->
+          | (Oaddr addr | Oaddr_rip_relative addr) when op_size = 128 ->
               let word_size = width_of_mode mode in
               let zero = Bil.int (Word.zero word_size) in
               let oxf = Bil.int (Word.of_int ~width:word_size 0xf) in
@@ -1129,7 +1129,7 @@ module ToIR = struct
                   ]);
             [ assn exp_type dst_op (Bil.var tmp_dst) ];
           ]
-    | Lea (t, r, a) when List.is_empty pref ->
+    | Lea (t, r, a, _) when List.is_empty pref ->
         (* See Table 3-64 *)
         (* previously, it checked whether addrbits > opbits before the cast_low.
        * The conclusion we came to was that
@@ -1331,7 +1331,7 @@ module ToIR = struct
               let reg = op2e t bitbase in
               let shift = Bil.(offset land int_exp Stdlib.(t' - 1) t') in
               (reg, shift)
-          | Oaddr a ->
+          | (Oaddr a | Oaddr_rip_relative a) ->
               let offset = Bil.(cast unsigned (width_of_mode mode) offset) in
               let byte =
                 load (size_of_typ reg8_t) Bil.(a + (offset lsr int_exp 3 t'))
@@ -1408,7 +1408,7 @@ module ToIR = struct
     | Stmxcsr dst ->
         let dst =
           match dst with
-          | Oaddr addr -> addr
+          | (Oaddr addr | Oaddr_rip_relative addr) -> addr
           | _ -> disfailwith "stmxcsr argument cannot be non-memory"
         in
         [
@@ -1417,21 +1417,21 @@ module ToIR = struct
     | Ldmxcsr src ->
         let src =
           match src with
-          | Oaddr addr -> addr
+          | (Oaddr addr | Oaddr_rip_relative addr) -> addr
           | _ -> disfailwith "ldmxcsr argument cannot be non-memory"
         in
         [ Bil.Move (mxcsr, load (size_of_typ reg32_t) src) ]
     | Fnstcw dst ->
         let dst =
           match dst with
-          | Oaddr addr -> addr
+          | (Oaddr addr | Oaddr_rip_relative addr) -> addr
           | _ -> disfailwith "fnstcw argument cannot be non-memory"
         in
         [ store reg16_t dst (Bil.Var fpu_ctrl) ]
     | Fldcw src ->
         let src =
           match src with
-          | Oaddr addr -> addr
+          | (Oaddr addr | Oaddr_rip_relative addr) -> addr
           | _ -> disfailwith "fldcw argument cannot be non-memory"
         in
         [ Bil.Move (fpu_ctrl, load (size_of_typ reg16_t) src) ]
@@ -1917,7 +1917,7 @@ module ToIR = struct
     | Sysenter | Syscall -> [ Bil.(encode call "syscall") ]
     (* Match everything exhaustively *)
     | Leave _ -> unimplemented "to_ir: Leave"
-    | Lea _ -> unimplemented "to_ir: Lea"
+    | Lea _ -> unimplemented "to_ir: Lea1"
     | Movs _ -> unimplemented "to_ir: Movs"
     | Cmps _ -> unimplemented "to_ir: Cmps"
     | Scas _ -> unimplemented "to_ir: Scas"
@@ -1929,7 +1929,7 @@ end
 
 let disasm_instr mode mem addr =
   let module D = X86_disasm in
-  let pref, prefix, op, na = D.parse_instr mode mem addr in
+  let pref, prefix, op, na, _rip_rel = D.parse_instr mode mem addr in
   let has_rex = Option.is_some prefix.rex in
   let has_vex = Option.is_some prefix.vex in
   let ss, pref = D.parse_prefixes mode pref op in

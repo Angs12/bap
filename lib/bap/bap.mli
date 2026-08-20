@@ -2062,6 +2062,9 @@ module Std : sig
         @since 2.3.0 *)
     val code : (Theory.program, stmt list) KB.slot
 
+    (** RIP-relative addressing is used in the semantics.  *)
+    val rip_relative : (Theory.Program.Semantics.cls, bool) Knowledge.slot
+
     (** [printf "%a" pp_binop op] prints a binary operation [op].  *)
     val pp_binop : Format.formatter -> binop -> unit
 
@@ -8982,6 +8985,11 @@ module Std : sig
     (** updates the right hand side of a definition  *)
     val with_rhs : t -> exp -> t
 
+    (** [with_value def v] replaces the RHS with a Core Theory value [v],
+        preserving the BIL expression inside. Useful for attaching KB
+        properties to the def's value. *)
+    val with_value : t -> unit Theory.value -> t
+
     (** [map_exp def f] applies [f] to a [rhs] of [def] and returns
         an updated definition. *)
     val map_exp : t -> f:(exp -> exp) -> t
@@ -9000,6 +9008,11 @@ module Std : sig
 
     include Regular.S with type t := t
   end
+
+  (** [rip_relative_addr] marks a Core Theory value as a RIP-relative
+      address. Set on the RHS value of defs whose assigned address is
+      RIP-relative (e.g., Load/Store from RIP-relative instructions). *)
+  val rip_relative_addr : (Theory.Value.cls, bool) Knowledge.slot
 
   (** A control transfer operation.  *)
   module Jmp : sig

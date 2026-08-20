@@ -200,8 +200,16 @@ end = struct
   include (val KB.Value.derive cls)
 end
 
-
 let to_var v = Theory.Var.create (Var.sort v) (Var.ident v)
+
+let rip_relative_addr =
+  let bool_domain = Knowledge.Domain.flat ~inspect:Bool.sexp_of_t
+      ~equal:Bool.equal ~empty:false "bool" in
+  Knowledge.Class.property ~package
+    Theory.Value.cls "rip-relative-addr" bool_domain
+    ~public:true
+    ~desc:"this value is a RIP-relative address"
+
 
 module Def : sig
   type t = {
@@ -703,6 +711,13 @@ module Ir_def = struct
     t with self = Def.{
       var;
       rhs = Rhs.with_exp exp rhs
+    }
+  }
+
+  let with_value ({self={Def.var}} as t) v = {
+    t with self = Def.{
+      var;
+      rhs = Rhs.of_value v
     }
   }
 

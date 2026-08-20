@@ -93,6 +93,27 @@ let () =
   let open Bap_core_theory in
   let open Bap_primus.Std in
   main !!backend !!kind !!abi;
+  begin
+    let open KB.Syntax in
+    KB.promise Theory.Label.is_rip_relative @@ fun label ->
+    KB.collect Arch.slot label >>= fun arch ->
+    match arch with
+    | `x86_64 ->
+      begin
+        KB.collect Memory.slot label >>= fun mem ->
+        match mem with
+        | Some mem ->
+          let addr = Memory.min_addr mem in
+          let rip_rel = try
+            let (_pref, _prefix, _op, _a, rip_rel) =
+              X86_disasm.parse_instr X86_types.X8664 mem addr in
+            Some rip_rel
+          with _ -> None in
+          KB.return rip_rel
+        | _ -> KB.return None
+      end
+    | _ -> KB.return None
+  end;
   if !!fp_lifter || !!legacy_lifter then begin
     let open Bap_core_theory in
     let open Bap_primus.Std in

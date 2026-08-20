@@ -211,6 +211,8 @@ module Label = struct
       "is the program valid or not"
   let is_subroutine = attr "is-subroutine"
       "is the program a subroutine entry point"
+  let is_rip_relative = attr "is-rip-relative"
+      "the instruction uses RIP-relative addressing"
 
   let encoding = Knowledge.Class.property ~package cls "encoding"
       Language.domain

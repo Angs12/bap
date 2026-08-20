@@ -1987,6 +1987,9 @@ module Theory : sig
     (** a link is subroutine if it is an entry point to a subroutine.  *)
     val is_subroutine : (program, bool option) KB.slot
 
+    (** the instruction uses RIP-relative addressing.  *)
+    val is_rip_relative : (program, bool option) KB.slot
+
 
     (** [fresh] a fresh label (a shortcut for [KB.create cls]).
 

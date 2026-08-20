@@ -298,12 +298,12 @@ let parse_instr mode mem addr =
           (match mode with
            | X86 ->
              let (disp, na) = parse_disp32 na in (r, Oaddr (b32 disp), na)
-           | X8664 ->
-             let immoff = match naoffset with
-               | Some (Type.Imm nbits) -> int_exp (nbits / 8) 64
-               | _ -> int_exp 0 64
-             in
-             let (disp, na) = parse_disp32 na in (r, Oaddr Bil.(b64 disp + b64 na + immoff), na))
+            | X8664 ->
+              let immoff = match naoffset with
+                | Some (Type.Imm nbits) -> int_exp (nbits / 8) 64
+                | _ -> int_exp 0 64
+              in
+              let (disp, na) = parse_disp32 na in (r, Oaddr_rip_relative Bil.(b64 disp + b64 na + immoff), na))
         | _ -> (r, Oaddr(bits2rege rm), na)
       )
     | 1 | 2 ->
@@ -510,8 +510,9 @@ let parse_instr mode mem addr =
       let extend = if Type.equal prefix.opsize reg64_t then reg64_t else reg16_t in
       (Mov(extend, rm, r, None), na)
     | 0x8d -> let (r, rm, na) = parse_modrm_addr None na in
+      let rip_rel = match rm with Oaddr_rip_relative _ -> true | _ -> false in
       (match rm with
-       | Oaddr a -> (Lea(prefix.opsize, r, a), na)
+       | (Oaddr a | Oaddr_rip_relative a) -> (Lea(prefix.opsize, r, a, rip_rel), na)
        | _ -> disfailwith "invalid lea (must be address)")
     | 0x8e -> let (r, rm, na) = parse_modrmseg_addr None na in
       (Mov(reg16_t, r, rm, None), na)
@@ -593,34 +594,34 @@ let parse_instr mode mem addr =
       let b2, _ = parse_int8 na in
       let (r, rm, na) = parse_modrmext_addr None na in
       (match r, rm with
-       | 2, Oaddr _ ->
-         (match b1 with
-          | 0xd9 | 0xdd -> (Fst(rm, false), na)
-          | _ ->
-            unimplemented (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
-         )
-       | 3, Oaddr _ ->
-         (match b1 with
-          | 0xd9 | 0xdd -> (Fst(rm, true), na)
-          | _ ->
-            unimplemented (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
-         )
-       | 5, Oaddr _ ->
-         (match b1 with
-          | 0xd9 -> (Fldcw rm, na)
-          | 0xdb -> (Fld rm, na)
-          | _ ->
-            unimplemented (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
-         )
-       | 7, Oaddr _ ->
-         (match b1 with
-          | 0xd9 -> (Fnstcw rm, na)
-          | 0xdb -> (Fst(rm, true), na)
-          | _ ->
-            unimplemented (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
-         )
-       | _, Oaddr _ ->
-         unimplemented (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
+        | (2, Oaddr _ | 2, Oaddr_rip_relative _) ->
+          (match b1 with
+           | 0xd9 | 0xdd -> (Fst(rm, false), na)
+           | _ ->
+             unimplemented (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
+          )
+        | (3, Oaddr _ | 3, Oaddr_rip_relative _) ->
+          (match b1 with
+           | 0xd9 | 0xdd -> (Fst(rm, true), na)
+           | _ ->
+             unimplemented (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
+          )
+        | (5, Oaddr _ | 5, Oaddr_rip_relative _) ->
+          (match b1 with
+           | 0xd9 -> (Fldcw rm, na)
+           | 0xdb -> (Fld rm, na)
+           | _ ->
+             unimplemented (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
+          )
+        | (7, Oaddr _ | 7, Oaddr_rip_relative _) ->
+          (match b1 with
+           | 0xd9 -> (Fnstcw rm, na)
+           | 0xdb -> (Fst(rm, true), na)
+           | _ ->
+             unimplemented (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
+          )
+        | (_, Oaddr _ | _, Oaddr_rip_relative _) ->
+          unimplemented (Printf.sprintf "unsupported opcode: %02x/%d" b1 r)
        | _, _ ->
          unimplemented (Printf.sprintf "unsupported opcode: %02x %s" b1 (Word.string_of_value b2))
       )
@@ -801,8 +802,8 @@ let parse_instr mode mem addr =
                         :: {offlen=t; offtyp=reg128_t; offop=s; offsrcoffset=0; offdstoffset=0} :: []), na)
            | Ovec _, None ->
              (Movdq(t, s, t, d, false), na)
-           | Oaddr _, _ ->
-             (Movdq(t, s, td, d, false), na)
+           | (Oaddr _, _ | Oaddr_rip_relative _, _) ->
+              (Movdq(t, s, td, d, false), na)
            | _ -> disfailwith "impossible")
         | 0x12 | 0x13 | 0x16 | 0x17 -> (* MOVLPS, MOVLPD, MOVHPS, MOVHPD, MOVHLPS, MOVHLPD, MOVLHPS, MOVLHPD *)
           let r, rm, rv, na = parse_modrm_vec None na in
@@ -1252,8 +1253,35 @@ let parse_instr mode mem addr =
       sib_extend;
     }
   in
+  let op_has_rip_relative =
+    let is_rip = function Oaddr_rip_relative _ -> true | _ -> false in
+    function
+    | Lea(_, _, _, b) -> b
+    | Inc(_, a) | Dec(_, a) | Push(_, a) | Pop(_, a) | Not(_, a) | Neg(_, a)
+    | Mul(_, a) | Div(_, a) | Idiv(_, a) | Bswap(_, a) -> is_rip a
+    | Stmxcsr a | Ldmxcsr a | Fnstcw a | Fldcw a | Fld a | Cmpxchg8b a
+    | Interrupt a -> is_rip a
+    | Mov(_, a, b, _) | Movzx(_, a, _, b) | Movsx(_, a, _, b)
+    | Movdq(_, a, _, b, _) | Add(_, a, b) | Sub(_, a, b)
+    | And(_, a, b) | Or(_, a, b) | Xor(_, a, b) | Cmp(_, a, b)
+    | Adc(_, a, b) | Sbb(_, a, b) | Test(_, a, b) | Xchg(_, a, b)
+    | Cmpxchg(_, a, b) | Xadd(_, a, b) | Ptest(_, a, b)
+    | Bt(_, a, b) | Popcnt(_, a, b) | Pmovmskb(_, a, b)
+    | Rotate(_, _, a, b, _) | Shift(_, _, a, b) | Shiftd(_, _, a, b, _) ->
+      is_rip a || is_rip b
+    | Imul(_, _, a, b) | Bs(_, a, b, _) -> is_rip a || is_rip b
+    | Setcc(_, a, _) | Fst(a, _) -> is_rip a
+    | Movoffset((_, a), _) -> is_rip a
+    | Pmov(_, _, _, a, b, _, _) | Pcmp(_, _, _, _, a, b, _)
+    | Pshufb(_, a, b, _) | Pshufd(_, a, b, _, _)
+    | Palignr(_, a, b, _, _) | Pcmpstr(_, a, b, _, _, _)
+    | Pbinop(_, _, _, a, b, _) | Ppackedbinop(_, _, _, _, a, b, _)
+    | Punpck(_, _, _, a, b, _) -> is_rip a || is_rip b
+    | Jump(Jabs a) | Call(a, _) | Jcc(Jabs a, _) -> is_rip a
+    | _ -> false
+  in
   let op, a = get_opcode pref prefix a in
-  (pref, prefix, op, a)
+  (pref, prefix, op, a, op_has_rip_relative op)
 
 let parse_prefixes mode pref _ =
   let module R = (val (vars_of_mode mode)) in
