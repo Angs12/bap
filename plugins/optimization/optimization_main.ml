@@ -32,14 +32,14 @@ let def_use_collector =
   end
 
 let computed_def_use sub =
-  def_use_collector#visit_sub sub (Var.Set.empty, Var.Set.empty)
+  def_use_collector#visit_sub sub (Set.empty (module Var), Set.empty (module Var))
 
 let compute_dead can_touch protected sub =
   let defs, uses = computed_def_use sub in
   let dead = Set.diff defs uses in
   let live v = not (Set.mem dead v) in
   Term.enum blk_t sub
-  |> Seq.fold ~init:Tid.Set.empty ~f:(fun dead blk ->
+  |> Seq.fold ~init:(Set.empty (module Tid)) ~f:(fun dead blk ->
       Term.enum ~rev:true def_t blk
       |> Seq.fold ~init:(protected, dead) ~f:(fun (protected, dead) def ->
           let v = Def.lhs def in
@@ -89,7 +89,7 @@ let substitute sub vars =
 
 (* A simple constant propagation. Note, the input is required to be in SSA. *)
 let propagate_consts can_touch sub =
-  Seq.fold (Term.enum blk_t sub) ~init:Var.Map.empty ~f:(fun vars b ->
+  Seq.fold (Term.enum blk_t sub) ~init:(Map.empty (module Var)) ~f:(fun vars b ->
       Seq.fold (Term.enum def_t b) ~init:vars ~f:(fun vars d ->
           let v = Def.lhs d in
           if can_touch v then
@@ -111,7 +111,7 @@ let free_vars prog =
   report_progress ~note:"free-vars" ();
   let ( ++ ) = Set.union in
   let collect cls t ~f =
-    Seq.fold (Term.enum cls t) ~init:Var.Set.empty ~f:(fun acc x -> acc ++ f x)
+    Seq.fold (Term.enum cls t) ~init:(Set.empty (module Var)) ~f:(fun acc x -> acc ++ f x)
   in
   let sub_free sub = Sub.free_vars sub |> Set.filter ~f:Var.is_physical in
   let sub_args sub =
@@ -128,7 +128,7 @@ let process_sub free can_touch sub =
     if Set.is_empty dead' then (s, dead)
     else loop dead (clean can_touch dead' s)
   in
-  let sub', dead = loop Tid.Set.empty (Sub.ssa sub) in
+  let sub', dead = loop (Set.empty (module Tid)) (Sub.ssa sub) in
   O.create dead sub'
 
 let digest_of_sub sub level =

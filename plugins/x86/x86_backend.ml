@@ -19,16 +19,16 @@ end
 
 module Make (PR : PR) = struct
 
-  let lifts : lifter Table.t = Table.create ()
+  let lifts : lifter Table.t = Hashtbl.create (module String)
 
   let register opcode lift =
-    Table.set lifts ~key:opcode ~data:lift
+    Hashtbl.set lifts ~key:opcode ~data:lift
 
   module Make (T : Target) : Target = struct
     module CPU = T.CPU
 
     let search tab insn =
-      Option.value ~default:T.lift (Table.find tab (Insn.name insn))
+      Option.value ~default:T.lift (Hashtbl.find tab (Insn.name insn))
 
     let lift mem insn =
       let lift = search lifts insn in

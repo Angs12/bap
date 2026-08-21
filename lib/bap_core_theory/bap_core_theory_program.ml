@@ -101,7 +101,7 @@ module Compiler = struct
 
   let create ?(specs=[]) ?(version=[]) ?(options=[]) name = {
     name; version; options;
-    specs = String.Map.of_alist_exn specs;
+    specs = Map.of_alist_exn (module String) specs;
   }
 
   let pp ppf x = Sexp.pp_hum ppf (sexp_of_t x)

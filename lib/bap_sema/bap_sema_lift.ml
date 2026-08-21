@@ -470,7 +470,7 @@ let fix_names prog =
     Theory.Label.for_name name >>| Fn.non (Tid.equal tid) in
   let keep_name tids name tid = Map.set tids ~key:name ~data:tid in
   Term.enum sub_t prog |>
-  KB.Seq.fold ~init:String.Map.empty ~f:(fun tids sub ->
+  KB.Seq.fold ~init:(Map.empty (module String)) ~f:(fun tids sub ->
       let tid = Term.tid sub in
       let name = Ir_sub.name sub in
       match Map.find tids name with

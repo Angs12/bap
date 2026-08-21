@@ -364,7 +364,7 @@
 *)
 
 open Core_kernel[@@warning "-D"]
-open Caml.Format
+open Stdlib.Format
 open Bap_knowledge
 
 
@@ -774,7 +774,7 @@ module Theory : sig
           This module enables construction of complex data structures
           on sorts, like maps, sets, etc, e.g.,
 
-          [let sorts = Set.empty (module Value.Sort.Top)]
+          [let sorts = (Set.empty (module Value.Sort.Top))]
 
           Since such structures are required to be monomorphic, the
           sort type index should be removed using the [forget] function,
@@ -953,7 +953,7 @@ module Theory : sig
   end
 
   type 'a value = 'a Value.t
-  type 'a effect = 'a Effect.t
+  type 'a eff0 = 'a Effect.t
 
   (** The sort for boolean values.
 
@@ -1074,7 +1074,7 @@ module Theory : sig
   end
 
   type 'a pure = 'a value knowledge
-  type 'a eff = 'a effect knowledge
+  type 'a eff = 'a eff0 knowledge
   type ('r,'s) format = ('r,'s) Float.format
 
 
@@ -1194,7 +1194,7 @@ module Theory : sig
     (** Variables with erased sort index.
 
         This module enables construction of complex data structures on
-        variables, e.g., [Set.empty (module Theory.Var.Top)].
+        variables, e.g., [(Set.empty (module Theory.Var.Top))].
 
         The variables are ordered by their identifiers so that two
         variables with the same name but different sorts are compared

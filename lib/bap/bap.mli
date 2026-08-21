@@ -164,7 +164,7 @@ module Std : sig
       contains all functions and types related to type [exp]. For
       example, to create a hashtable of statements, just type:
 
-      [let table = Exp.Table.create ()]
+      [let table = Hashtbl.create (module Exp) ()]
 
       If a type is a variant type (i.e., it defines constructors) then
       for each constructor named [Name], there exists a corresponding
