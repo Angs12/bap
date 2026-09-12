@@ -517,51 +517,25 @@ let disassemble ~code ~data ~funs debt base : Machine.state KB.t =
           Dis.run disasm mem ~stop_on:[`Valid]
             ~return:KB.return ~init:(Machine.switch init encoding)
             ~stopped:(fun d s -> step d (Machine.stopped s encoding))
+            ~hit:(fun d mem insn s ->
+                KB.catch begin
+                  new_insn mem insn >>= fun label ->
+                  let encoding = Machine.encoding s in
+                  KB.provide Theory.Label.encoding label encoding.coding >>= fun () ->
+                  collect_dests encoding label >>= fun dests ->
+                  if Set.is_empty dests.resolved && not dests.indirect
+                  then step d @@ Machine.moved s encoding mem
+                  else
+                    delay label >>= fun delay ->
+                    step d @@ Machine.jumped s encoding mem dests delay
+                end @@ fun problem ->
+                warning "rejecting %a due to a conflict %a"
+                  Memory.pp mem KB.Conflict.pp problem;
+                step d (Machine.failed s encoding s.addr))
             ~invalid:(fun d mem s ->
                 info "rejecting %a as an invalid instruction"
                   Memory.pp mem;
-                step d (Machine.failed s encoding s.addr))
-            ~hit:(fun d mem insn s ->
-                KB.catch (new_insn mem insn >>| fun label -> `Decoded label)
-                  (fun problem ->
-                     warning "rejecting %a due to a conflict %a"
-                       Memory.pp mem KB.Conflict.pp problem;
-                     step d (Machine.failed s encoding s.addr) >>|
-                     fun s -> `Rejected s)
-                >>= fun action ->
-                match action with
-                | `Rejected s -> KB.return s
-                | `Decoded label ->
-                  let encoding = Machine.encoding s in
-                  KB.catch
-                    (KB.provide Theory.Label.encoding label encoding.coding >>= fun () ->
-                     collect_dests encoding label >>= fun dests ->
-                     if Set.is_empty dests.resolved && not dests.indirect
-                     then step d @@ Machine.moved s encoding mem >>| fun s -> `Moved s
-                     else
-                       delay label >>= fun delay ->
-                       step d @@ Machine.jumped s encoding mem dests delay >>|
-                       fun s -> `Jumped s)
-                    (fun problem ->
-                       (* the instruction is decoded and real; only the
-                          derivation of its successors conflicted: cut the
-                          block with an unresolved jump and keep the
-                          fallthrough *)
-                       warning "unable to derive the successors of %a: %a"
-                         Memory.pp mem KB.Conflict.pp problem;
-                       let dests = {
-                         encoding;
-                         call = false;
-                         barrier = false;
-                         indirect = true;
-                         resolved = Set.empty (module Addr);
-                         unresolved = Set.empty (module Theory.Label);
-                       } in
-                       step d @@ Machine.jumped s encoding mem dests 0 >>|
-                       fun s -> `Jumped s)
-                  >>= fun result ->
-                  match result with
-                  | `Moved s | `Jumped s -> KB.return s))
+                step d (Machine.failed s encoding s.addr)))
     ~empty:KB.return
 
 type insns = Theory.Label.t list
@@ -716,8 +690,7 @@ let rec insert pos x xs =
 
 let execution_order stack =
   KB.List.fold stack ~init:[] ~f:(fun insns insn ->
-      KB.catch (KB.collect Theory.Semantics.slot insn)
-        (fun _ -> KB.return Insn.empty) >>| fun s ->
+      KB.collect Theory.Semantics.slot insn >>| fun s ->
       match KB.Value.get Insn.Slot.delay s with
       | None -> insn::insns
       | Some d -> insert d insn insns)

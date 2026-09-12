@@ -81,11 +81,7 @@ let global_cfg disasm =
         Driver.execution_order insns >>=
         KB.List.filter_map ~f:(fun label ->
             KB.collect Basic.Insn.slot label >>= fun basic ->
-            (* the semantics of an instruction may be unresolvable; the
-               cfg is built from the destinations recorded by the
-               driver, so an empty value keeps the block alive *)
-            KB.catch (KB.collect Theory.Semantics.slot label)
-              (fun _ -> KB.return Insn.empty) >>= fun s ->
+            KB.collect Theory.Semantics.slot label >>= fun s ->
             KB.collect Memory.slot label >>| function
             | None -> None
             | Some mem -> Some (mem,create_insn basic s)) >>|

@@ -154,7 +154,7 @@ module M16 = struct
       [system], untyped [iopll; ioplh; rf; vm; ac; vif; vip; id; aes; ai]
     ]
 
-  let aliases = hregs @< lregs @< [iopl] @< [eflags]
+  let aliases = hregs @< lregs @< index8 @< [iopl] @< [eflags]
 
   let regs = Theory.Role.Register.[
       [general; integer], main @< index @< segment;
