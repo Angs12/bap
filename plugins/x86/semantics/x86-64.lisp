@@ -82,12 +82,8 @@
 
 ;; pshuflw (shuffle packed low words)
 ;; Reference: Vol. 2A 4-284
-(defun PSHUFLWrri (dst _ src ctl)
+(defun PSHUFLWri (dst src ctl)
   (pshuflw dst src ctl))
-
-(defun PSHUFLWrmi (dst _ base _ _ off _ ctl)
-  (let ((src (load-dword (+ base off))))
-    (pshuflw dst src ctl)))
 
 (defun pshuflw (dst src ctl)
   (declare (visibility :private))
@@ -100,12 +96,8 @@
 
 ;; pshufhw (shuffle packed high words)
 ;; Reference: Vol. 2A 4-281
-(defun PSHUFHWrri (dst _ src ctl)
+(defun PSHUFHWri (dst src ctl)
   (pshufhw dst src ctl))
-
-(defun PSHUFHWrmi (dst _ base _ _ off _ ctl)
-  (let ((src (load-dword (+ base off))))
-    (pshufhw dst src ctl)))
 
 (defun pshufhw (dst src ctl)
   (declare (visibility :private))
