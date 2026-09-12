@@ -46,8 +46,8 @@
   (set$ dst (concat
              (select4 src (extract 7 6 ctl))
              (select4 src (extract 5 4 ctl))
-             (select4 src (extract 3 2 ctl))
-             (select4 src (extract 1 0 ctl)))))
+             (select4 dst (extract 3 2 ctl))
+             (select4 dst (extract 1 0 ctl)))))
 
 ;; (select4 R N) selects an Nth 32-bit word from R.
 ;; Reference: Vol. 2B 4-648
@@ -59,6 +59,62 @@
     2 (extract 95 64 src)
     3 (extract 127 96 src)
     (error "expects a 2-bit selector")))
+
+;; (selectw R N) selects an Nth 16-bit word from the low quadword of R.
+(defun selectw (src ctl)
+  (declare (visibility :private))
+  (case ctl
+    0 (extract 15 0 src)
+    1 (extract 31 16 src)
+    2 (extract 47 32 src)
+    3 (extract 63 48 src)
+    (error "expects a 2-bit selector")))
+
+;; (selecth R N) selects an Nth 16-bit word from the high quadword of R.
+(defun selecth (src ctl)
+  (declare (visibility :private))
+  (case ctl
+    0 (extract 79 64 src)
+    1 (extract 95 80 src)
+    2 (extract 111 96 src)
+    3 (extract 127 112 src)
+    (error "expects a 2-bit selector")))
+
+;; pshuflw (shuffle packed low words)
+;; Reference: Vol. 2A 4-284
+(defun PSHUFLWrri (dst _ src ctl)
+  (pshuflw dst src ctl))
+
+(defun PSHUFLWrmi (dst _ base _ _ off _ ctl)
+  (let ((src (load-dword (+ base off))))
+    (pshuflw dst src ctl)))
+
+(defun pshuflw (dst src ctl)
+  (declare (visibility :private))
+  (set$ dst (concat
+             (extract 127 64 src)
+             (selectw src (extract 7 6 ctl))
+             (selectw src (extract 5 4 ctl))
+             (selectw src (extract 3 2 ctl))
+             (selectw src (extract 1 0 ctl)))))
+
+;; pshufhw (shuffle packed high words)
+;; Reference: Vol. 2A 4-281
+(defun PSHUFHWrri (dst _ src ctl)
+  (pshufhw dst src ctl))
+
+(defun PSHUFHWrmi (dst _ base _ _ off _ ctl)
+  (let ((src (load-dword (+ base off))))
+    (pshufhw dst src ctl)))
+
+(defun pshufhw (dst src ctl)
+  (declare (visibility :private))
+  (set$ dst (concat
+             (extract 127 64 src)
+             (selecth src (extract 7 6 ctl))
+             (selecth src (extract 5 4 ctl))
+             (selecth src (extract 3 2 ctl))
+             (selecth src (extract 1 0 ctl)))))
 
 ;; pmuludq
 ;; Reference: Vol. 2B 4-370
