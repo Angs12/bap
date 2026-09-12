@@ -88,52 +88,54 @@
 (defun CVTSI642SSrm_Int (dst _ ptr _ _ off _)
   (set-sse dst (sse-convert 'cast_sfloat 64 32 (load-mem ptr off))))
 
+;; the rm form: (dst base scale index disp segment), like the MCInst
+;; operands; the load reads [base + disp]
 (defun CVTTSS2SI64rr_Int (dst src)
   (set-sse dst (sse-convert 'cast_sint 64 32 src)))
 
-(defun CVTTSS2SI64rm_Int (dst _ ptr _ _ off _)
+(defun CVTTSS2SI64rm_Int (dst ptr _ _ off _)
   (set-sse dst (sse-convert 'cast_sint 64 32 (load-mem ptr off))))
 
 (defun CVTTSS2SIrr_Int (dst src)
   (set-sse dst (sse-convert 'cast_sint 32 32 src)))
 
-(defun CVTTSS2SIrm_Int (dst _ ptr _ _ off _)
+(defun CVTTSS2SIrm_Int (dst ptr _ _ off _)
   (set-sse dst (sse-convert 'cast_sint 32 32 (load-mem ptr off))))
 
 (defun CVTSS2SI64rr_Int (dst src)
   (set-sse dst (sse-convert 'cast_sint 64 32 src)))
 
-(defun CVTSS2SI64rm_Int (dst _ ptr _ _ off _)
+(defun CVTSS2SI64rm_Int (dst ptr _ _ off _)
   (set-sse dst (sse-convert 'cast_sint 64 32 (load-mem ptr off))))
 
 (defun CVTSS2SIrr_Int (dst src)
   (set-sse dst (sse-convert 'cast_sint 32 32 src)))
 
-(defun CVTSS2SIrm_Int (dst _ ptr _ _ off _)
+(defun CVTSS2SIrm_Int (dst ptr _ _ off _)
   (set-sse dst (sse-convert 'cast_sint 32 32 (load-mem ptr off))))
 
 (defun CVTTSD2SI64rr_Int (dst src)
   (set-sse dst (sse-convert 'cast_sint 64 64 src)))
 
-(defun CVTTSD2SI64rm_Int (dst _ ptr _ _ off _)
+(defun CVTTSD2SI64rm_Int (dst ptr _ _ off _)
   (set-sse dst (sse-convert 'cast_sint 64 64 (load-mem ptr off))))
 
 (defun CVTTSD2SIrr_Int (dst src)
   (set-sse dst (sse-convert 'cast_sint 32 64 src)))
 
-(defun CVTTSD2SIrm_Int (dst _ ptr _ _ off _)
+(defun CVTTSD2SIrm_Int (dst ptr _ _ off _)
   (set-sse dst (sse-convert 'cast_sint 32 64 (load-mem ptr off))))
 
 (defun CVTSD2SI64rr_Int (dst src)
   (set-sse dst (sse-convert 'cast_sint 64 64 src)))
 
-(defun CVTSD2SI64rm_Int (dst _ ptr _ _ off _)
+(defun CVTSD2SI64rm_Int (dst ptr _ _ off _)
   (set-sse dst (sse-convert 'cast_sint 64 64 (load-mem ptr off))))
 
 (defun CVTSD2SIrr_Int (dst src)
   (set-sse dst (sse-convert 'cast_sint 32 64 src)))
 
-(defun CVTSD2SIrm_Int (dst _ ptr _ _ off _)
+(defun CVTSD2SIrm_Int (dst ptr _ _ off _)
   (set-sse dst (sse-convert 'cast_sint 32 64 (load-mem ptr off))))
 
 (defun CVTPS2PDrr (dst src)
@@ -146,9 +148,6 @@
 
 (defun CVTSI2SDrm_Int (dst _ ptr _ _ off _)
   (set-sse dst (sse-convert 'cast_sfloat 64 64 (load-mem ptr off))))
-
-(defun CVTSI2SSrr_Int (dst _ ptr _ _ off _)
-  (set-sse dst (sse-convert 'cast_sfloat 32 64 (load-mem ptr off))))
 
 (defun CVTSI2SSrr_Int (dst _ src)
   (set-sse dst (sse-convert 'cast_sfloat 32 64 src)))
