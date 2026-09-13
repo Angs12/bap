@@ -159,6 +159,9 @@
 (defun CVTSD2SSrr_Int (dst _ src)
   (set-sse dst (sse-convert 'fconvert 32 64 src)))
 
+(defun CVTSD2SSrm_Int (dst _ ptr _ _ off _)
+  (set-sse dst (sse-convert 'fconvert 32 64 (load-mem ptr off))))
+
 (defun CVTSS2SDrr_Int (dst _ src)
   (set-sse dst (sse-convert 'fconvert 64 32 src)))
 
