@@ -157,13 +157,13 @@
   (set-sse dst (sse-convert 'cast_sfloat 64 64 src)))
 
 (defun CVTSD2SSrr_Int (dst _ src)
-  (set-sse dst (sse-convert 'fconvert 64 32 src)))
-
-(defun CVTSS2SDrr_Int (dst _ src)
   (set-sse dst (sse-convert 'fconvert 32 64 src)))
 
+(defun CVTSS2SDrr_Int (dst _ src)
+  (set-sse dst (sse-convert 'fconvert 64 32 src)))
+
 (defun CVTSS2SDrm_Int (dst _ ptr _ _ off _)
-  (set-sse dst (sse-convert 'fconvert 32 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'fconvert 64 32 (load-mem ptr off))))
 
 (defun MINSDrr_Int (rd rm rn)
   (set-sse rd (if (ieee754-forder 64 rm rn) rn rm)))
