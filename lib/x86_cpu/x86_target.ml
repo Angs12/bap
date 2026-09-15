@@ -151,7 +151,13 @@ module M16 = struct
       [status], untyped [cf; pf; af; zf; sf; of_];
       [control], untyped [tf; if_; df; md];
       [integer], untyped [cf; pf; af; zf; sf; of_];
-      [system], untyped [iopll; ioplh; rf; vm; ac; vif; vip; id; aes; ai]
+      [system], untyped [iopll; ioplh; rf; vm; ac; vif; vip; id; aes; ai];
+      (* AF has no core-theory role. *)
+      [carry_flag], untyped [cf];
+      [parity_flag], untyped [pf];
+      [zero_flag], untyped [zf];
+      [sign_flag], untyped [sf];
+      [overflow_flag], untyped [of_]
     ]
 
   let aliases = hregs @< lregs @< index8 @< [iopl] @< [eflags]
