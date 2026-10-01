@@ -256,8 +256,9 @@ void emit_relocations(const ELFObjectFile<T> &obj, ogre_doc &s) {
                 auto typ = prim::relocation_type(rel);
                 if (typ == rel_reloc) {
                     s.entry("llvm:relative-relocation") << raddr;
-                    s.entry("llvm:relative-relocation-addend") << raddr
-                        << (*rel).getAddend();
+                    if (auto addend = ELFRelocationRef(rel).getAddend())
+                        s.entry("llvm:relative-relocation-addend") << raddr
+                            << *addend;
                 }
             }
         }
