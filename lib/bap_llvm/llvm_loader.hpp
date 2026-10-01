@@ -28,6 +28,7 @@ static std::string scheme =
     "(declare llvm:name-reference (at int) (name str))\n"
     "(declare llvm:relocation (at int) (addr int))\n"
     "(declare llvm:relative-relocation (at int))\n"
+    "(declare llvm:relative-relocation-addend (at int) (addend int))\n"
     "(declare llvm:section-entry (name str) (addr int) (size int) (off int))\n"
     "(declare llvm:section-flags (name str) (r bool) (w bool) (x bool))\n"
     "(declare llvm:segment-command-flags (name str) (r bool) (w bool) (x bool))\n"
