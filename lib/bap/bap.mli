@@ -6952,6 +6952,14 @@ module Std : sig
         ?brancher:brancher ->
         ?rooter:rooter -> arch -> mem -> t Or_error.t
 
+      (** [run_in_scope ?brancher ?rooter arch mem] is [run] as a
+          knowledge computation: the scan runs in the caller's machine,
+          so dynamic scopes the caller establishes (the current
+          theory, in particular) hold while the instructions reify. *)
+      val run_in_scope :
+        ?brancher:brancher ->
+        ?rooter:rooter -> arch -> mem -> t Or_error.t knowledge
+
       (** [cfg t] returns a control flow graph, representing the code
           in the input region of memory. Note, this is not a subroutine CFG,
           is is a whole segment graph.  *)
