@@ -6969,6 +6969,13 @@ module Std : sig
           happened during the disassembly (e.g., unknown opcodes and
           unlifted instructions.  *)
       val errors : t -> error list
+
+      (** [global_cfg state] reconstructs the whole-program CFG from a
+          grown driver [state] — the same CFG the [run] entry points
+          produce, for callers that drive [Driver.scan] themselves (a
+          re-decode loop that feeds the scanner discovered roots and
+          destinations). *)
+      val global_cfg : Bap_disasm_driver.state -> cfg knowledge
     end
   end
 
