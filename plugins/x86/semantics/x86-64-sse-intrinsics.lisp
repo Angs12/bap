@@ -177,6 +177,12 @@
 (defun MFENCE ()
   (intrinsic 'mfence))
 
+(defun LFENCE ()
+  (intrinsic 'lfence))
+
+(defun SFENCE ()
+  (intrinsic 'sfence))
+
 (defun sse-truncate (name rt rs rn)
   (intrinsic
    (symbol-concat name 'rtz *sse-format* :sep '_)

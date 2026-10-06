@@ -35,7 +35,10 @@ module Make (PR : PR) = struct
       try match lift mem insn with
         | Error err -> Error err
         | Ok bil as ok -> match Type.check bil with
-          | Ok () -> ok
+          | Ok () ->
+            if X86_prefix.exists `xF0 mem
+            then Ok (PR.lock bil)
+            else ok
           | Error te ->
             warning "BIL is not well-typed %a - %a"
               X86_utils.pp_insn (mem,insn) Type.Error.pp te;

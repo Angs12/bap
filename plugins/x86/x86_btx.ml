@@ -126,17 +126,11 @@ module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
         Ok bil)
 
   let btx (op:btx) =
-    let open Or_error in
-    let lift = match op with
-      | #btx_rr as op -> btx_rr op
-      | #btx_ri as op -> btx_ri op
-      | #btx_mi as op -> btx_mi op
-      | #btx_mr as op -> btx_mr op in
-    fun mem insn ->
-      lift mem insn >>= fun bil ->
-      match op with
-      | #bt_crs_mem when X86_prefix.exists `xF0 mem -> Ok (PR.lock bil)
-      | _ -> Ok bil
+    match op with
+    | #btx_rr as op -> btx_rr op
+    | #btx_ri as op -> btx_ri op
+    | #btx_mi as op -> btx_mi op
+    | #btx_mr as op -> btx_mr op
 
   let register what =
     let name op = sexp_of_btx (op :> btx) |> Sexp.to_string in

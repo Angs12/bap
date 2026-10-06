@@ -1927,13 +1927,21 @@ module ToIR = struct
 end
 (* ToIR *)
 
+let xchg_memory = function
+  | Xchg (_, (Oaddr _ | Oaddr_rip_relative _), _)
+  | Xchg (_, _, (Oaddr _ | Oaddr_rip_relative _)) -> true
+  | _ -> false
+
 let disasm_instr mode mem addr =
   let module D = X86_disasm in
   let pref, prefix, op, na, _rip_rel = D.parse_instr mode mem addr in
   let has_rex = Option.is_some prefix.rex in
   let has_vex = Option.is_some prefix.vex in
   let ss, pref = D.parse_prefixes mode pref op in
-  ToIR.to_ir mode addr na ss pref has_rex has_vex op
+  let bil = ToIR.to_ir mode addr na ss pref has_rex has_vex op in
+  if xchg_memory op && not (X86_prefix.exists `xF0 mem)
+  then X86_tools_prefix.lock bil
+  else bil
 
 let insn arch mem insn =
   let mode = match arch with `x86 -> X86 | `x86_64 -> X8664 in
