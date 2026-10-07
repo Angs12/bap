@@ -1091,9 +1091,10 @@ let parse_instr mode mem addr =
         | 0xbf -> let st = if b2 = 0xbe then reg8_t else reg16_t in
           let r, rm, na = parse_modrm_addr None na in
           (Movsx(prefix.opsize, r, st, rm), na)
-        | 0xc1 ->
+        | 0xc0 | 0xc1 ->
+          let size = if b2 = 0xc0 then reg8_t else prefix.opsize in
           let r, rm, na = parse_modrm_addr None na in
-          (Xadd(prefix.opsize, r, rm), na)
+          (Xadd(size, rm, r), na)
         | 0xc7 ->
           let r, rm, na = parse_modrmext_addr None na in
           (match r with
