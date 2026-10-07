@@ -1671,12 +1671,11 @@ module ToIR = struct
             assn t o_rax (Bil.Ite (zf_e, eax_e, dst_e));
           ]
     | Cmpxchg8b o ->
-        (* only 32bit case *)
         let accumulator = Bil.Concat (op2e reg32_t o_rdx, op2e reg32_t o_rax) in
         let dst_e = op2e reg64_t o in
         let src_e = Bil.Concat (op2e reg32_t o_rcx, op2e reg32_t o_rbx) in
-        let dst_low_e = Bil.Extract (63, 32, dst_e) in
-        let dst_hi_e = Bil.Extract (31, 0, dst_e) in
+        let dst_low_e = Bil.Extract (31, 0, dst_e) in
+        let dst_hi_e = Bil.Extract (63, 32, dst_e) in
         let eax_e = op2e reg32_t o_rax in
         let edx_e = op2e reg32_t o_rdx in
         let equal = tmp bool_t in
