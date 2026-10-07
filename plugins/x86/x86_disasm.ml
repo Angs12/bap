@@ -517,8 +517,8 @@ let parse_instr mode mem addr =
        | _ -> disfailwith "invalid lea (must be address)")
     | 0x8e -> let (r, rm, na) = parse_modrmseg_addr None na in
       (Mov(reg16_t, r, rm, None), na)
-    | 0x90 -> (Nop, na)
-    | 0x91 | 0x92 | 0x93 | 0x94 | 0x95 | 0x96 | 0x97 ->
+    | 0x90 when rm_extend = 0 -> (Nop, na)
+    | 0x90 | 0x91 | 0x92 | 0x93 | 0x94 | 0x95 | 0x96 | 0x97 ->
       let reg = Oreg (rm_extend lor (b1 land 7)) in
       (Xchg(prefix.opsize, o_rax, reg), na)
     | 0x98 -> let srct =
