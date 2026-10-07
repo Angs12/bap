@@ -25,6 +25,7 @@ static std::string scheme =
     "(declare llvm:macho-symbol (name str) (value int))\n"
     "(declare llvm:elf-program-header-flags (name str) (ld bool) (r bool) (w bool) (x bool))\n"
     "(declare llvm:elf-program-header (name str) (off int) (size int))\n"
+    "(declare llvm:elf-program-header-type (name str) (type int) (align int))\n"
     "(declare llvm:name-reference (at int) (name str))\n"
     "(declare llvm:relocation (at int) (addr int))\n"
     "(declare llvm:relative-relocation (at int))\n"
