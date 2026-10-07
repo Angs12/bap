@@ -496,8 +496,9 @@ let parse_instr mode mem addr =
     | 0x85 -> let (r, rm, na) = parse_modrm_addr None na in
       let o = if b1 = 0x84 then reg8_t else prefix.opsize in
       (Test(o, rm, r), na)
-    | 0x87 -> let (r, rm, na) = parse_modrm_addr None na in
-      (Xchg(prefix.opsize, r, rm), na)
+    | 0x86 | 0x87 -> let (r, rm, na) = parse_modrm_addr None na in
+      let size = if b1 = 0x86 then reg8_t else prefix.opsize in
+      (Xchg(size, r, rm), na)
     | 0x88 -> let (r, rm, na) = parse_modrm_addr None na in
       (Mov(reg8_t, rm, r, None), na)
     | 0x89 -> let (r, rm, na) = parse_modrm_addr None na in
@@ -1073,9 +1074,10 @@ let parse_instr mode mem addr =
         | 0xaf ->
           let (r, rm, na) = parse_modrm_addr None na in
           (Imul(prefix.opsize, (false,r), r, rm), na)
-        | 0xb1 ->
+        | 0xb0 | 0xb1 ->
+          let size = if b2 = 0xb0 then reg8_t else prefix.opsize in
           let r, rm, na = parse_modrm_addr None na in
-          (Cmpxchg (prefix.opsize, r, rm), na)
+          (Cmpxchg (size, r, rm), na)
         | 0xb6
         | 0xb7 -> let st = if b2 = 0xb6 then reg8_t else reg16_t in
           let r, rm, na = parse_modrm_addr None na in
