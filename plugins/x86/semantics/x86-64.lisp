@@ -27,8 +27,20 @@
       (+ (get-program-counter) (get-instruction-length))
     reg))
 
+(defun is-eip (reg)
+  (= (symbol reg) 'EIP))
+
+;; The effective address [reg + off].  An addr32 IP-relative operand
+;; (EIP base) wraps the sum to 32 bits and zero-extends it.
+(defun ea (reg off)
+  (if (is-eip reg)
+      (cast-unsigned 64
+        (cast-low 32
+          (+ (get-program-counter) (get-instruction-length) off)))
+    (+ (reg# reg) off)))
+
 (defun load-mem (reg off)
-  (load-word (+ (reg# reg) off)))
+  (load-word (ea reg off)))
 
 
 ;; shufps (shuffle packed single precision floating-point values)
@@ -526,4 +538,4 @@
   (set rd (opo (opi rn rm))))
 
 (defmacro bitwise-rrm (set opo opi rd rn ptr off)
-  (set rd (opo (opi rn (load-bits (word-width (unquote rn)) (+ (reg# ptr) off))))))
+  (set rd (opo (opi rn (load-bits (word-width (unquote rn)) (ea ptr off))))))

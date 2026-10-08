@@ -264,21 +264,31 @@ module M64 = struct
     reg r16 "DS";
     reg r16 "ES";
     reg r16 "SS";
+    reg r16 "FS";
+    reg r16 "GS";
   ]
 
   let rx = array r64 "R" 8
       ~index:(fun i -> string_of_int (i+8))
 
-  let rx_sub t suffix = array t "R" 8
-      ~index:(fun i -> string_of_int (i+8) ^ suffix)
+  (* The APX extended GPRs R16..R31. *)
+  let egpr = array r64 "R" 16
+      ~index:(fun i -> string_of_int (i+16))
+
+  let rx_sub ?(first=8) ?(size=8) t suffix = array t "R" size
+      ~index:(fun i -> string_of_int (i+first) ^ suffix)
   let rxd = rx_sub r32 "D"
   let rxw = rx_sub r16 "W"
   let rxb = rx_sub r8 "B"
+  let egprd = rx_sub ~first:16 ~size:16 r32 "D"
+  let egprw = rx_sub ~first:16 ~size:16 r16 "W"
+  let egprb = rx_sub ~first:16 ~size:16 r8 "B"
 
   let stx = M32.stx
   let mmx = M32.mmx
-  let xmmx = array r128 "XMM" 16
-  let ymmx = array r256 "YMM" 16
+  (* The EVEX-only vector registers 16..31, in the 256-bit model. *)
+  let xmmx = array r128 "XMM" 32
+  let ymmx = array r256 "YMM" 32
   let mxsr = reg r32 "MXCSR"
 
   let flags = M32.flags
@@ -287,13 +297,13 @@ module M64 = struct
   let data = Theory.Var.define mems "mem"
 
   let aliases = M32.aliases @< M32.main @< M32.index @<
-                rxd @< rxw @< rxb @< xmmx
+                rxd @< rxw @< rxb @< egprd @< egprw @< egprb @< xmmx
 
-  let vars = main @< index @< segment @< rx @< stx @< mmx @< ymmx @<
+  let vars = main @< index @< segment @< rx @< egpr @< stx @< mmx @< ymmx @<
              flags @< [data] @< [mxsr]
 
   let regs =  Theory.Role.Register.[
-      [general; integer], main @< index @< segment @< rx;
+      [general; integer], main @< index @< segment @< rx @< egpr;
       [general; floating], stx @< mmx @< ymmx;
       [stack_pointer], untyped [reg r64 "RSP"];
       [frame_pointer], untyped [reg r64 "RBP"];
@@ -309,6 +319,9 @@ module M64 = struct
                  lo_bits_of rx are rxd @
                  lo_bits_of rxd are rxw @
                  lo_bits_of rxw are rxb @
+                 lo_bits_of egpr are egprd @
+                 lo_bits_of egprd are egprw @
+                 lo_bits_of egprw are egprb @
                  lo_bits_of ymmx are xmmx @
                  lo_bits_of [rflags] are [M16.eflags]
 end
