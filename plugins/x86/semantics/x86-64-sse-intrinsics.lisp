@@ -83,24 +83,24 @@
   (set-sse dst (sse-convert 'cast_sfloat 64 64 (load-mem ptr off))))
 
 (defun CVTSI642SSrr_Int (dst _ src)
-  (set-sse dst (sse-convert 'cast_sfloat 64 32 src)))
+  (set-sse dst (sse-convert 'cast_sfloat 32 64 src)))
 
 (defun CVTSI642SSrm_Int (dst _ ptr _ _ off _)
-  (set-sse dst (sse-convert 'cast_sfloat 64 32 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sfloat 32 64 (load-mem ptr off))))
 
 ;; the rm form: (dst base scale index disp segment), like the MCInst
 ;; operands; the load reads [base + disp]
 (defun CVTTSS2SI64rr_Int (dst src)
-  (set-sse dst (sse-convert 'cast_sint 64 32 src)))
+  (set-sse dst (with-rmode 'rtz (sse-convert 'cast_sint 64 32 src))))
 
 (defun CVTTSS2SI64rm_Int (dst ptr _ _ off _)
-  (set-sse dst (sse-convert 'cast_sint 64 32 (load-mem ptr off))))
+  (set-sse dst (with-rmode 'rtz (sse-convert 'cast_sint 64 32 (load-mem ptr off)))))
 
 (defun CVTTSS2SIrr_Int (dst src)
-  (set-sse dst (sse-convert 'cast_sint 32 32 src)))
+  (set-sse dst (with-rmode 'rtz (sse-convert 'cast_sint 32 32 src))))
 
 (defun CVTTSS2SIrm_Int (dst ptr _ _ off _)
-  (set-sse dst (sse-convert 'cast_sint 32 32 (load-mem ptr off))))
+  (set-sse dst (with-rmode 'rtz (sse-convert 'cast_sint 32 32 (load-mem ptr off)))))
 
 (defun CVTSS2SI64rr_Int (dst src)
   (set-sse dst (sse-convert 'cast_sint 64 32 src)))
@@ -115,16 +115,16 @@
   (set-sse dst (sse-convert 'cast_sint 32 32 (load-mem ptr off))))
 
 (defun CVTTSD2SI64rr_Int (dst src)
-  (set-sse dst (sse-convert 'cast_sint 64 64 src)))
+  (set-sse dst (with-rmode 'rtz (sse-convert 'cast_sint 64 64 src))))
 
 (defun CVTTSD2SI64rm_Int (dst ptr _ _ off _)
-  (set-sse dst (sse-convert 'cast_sint 64 64 (load-mem ptr off))))
+  (set-sse dst (with-rmode 'rtz (sse-convert 'cast_sint 64 64 (load-mem ptr off)))))
 
 (defun CVTTSD2SIrr_Int (dst src)
-  (set-sse dst (sse-convert 'cast_sint 32 64 src)))
+  (set-sse dst (with-rmode 'rtz (sse-convert 'cast_sint 32 64 src))))
 
 (defun CVTTSD2SIrm_Int (dst ptr _ _ off _)
-  (set-sse dst (sse-convert 'cast_sint 32 64 (load-mem ptr off))))
+  (set-sse dst (with-rmode 'rtz (sse-convert 'cast_sint 32 64 (load-mem ptr off)))))
 
 (defun CVTSD2SI64rr_Int (dst src)
   (set-sse dst (sse-convert 'cast_sint 64 64 src)))
@@ -168,11 +168,13 @@
 (defun CVTSS2SDrm_Int (dst _ ptr _ _ off _)
   (set-sse dst (sse-convert 'fconvert 64 32 (load-mem ptr off))))
 
+;; MINSD/MAXSD select the destination (rm) only on a strict order; an
+;; unordered or equal pair selects the source (rn).
 (defun MINSDrr_Int (rd rm rn)
-  (set-sse rd (if (ieee754-forder 64 rm rn) rn rm)))
+  (set-sse rd (if (ieee754-forder 64 rm rn) rm rn)))
 
 (defun MAXSDrr_Int (rd rm rn)
-  (set-sse rd (if (ieee754-forder 64 rm rn) rm rn)))
+  (set-sse rd (if (ieee754-forder 64 rn rm) rm rn)))
 
 (defun MFENCE ()
   (intrinsic 'mfence))
@@ -245,7 +247,7 @@
     (compare-floats rt rn rm)))
 
 (defmacro fp-compare (rt rn rm)
-  (compare-floats rt rm rm))
+  (compare-floats rt rn rm))
 
 (defun ieee754-is-nan (rt rn)
   (intrinsic 'is_nan_ieee754_binary
