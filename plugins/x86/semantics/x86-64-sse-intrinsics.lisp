@@ -168,14 +168,84 @@
 (defun CVTSS2SDrm_Int (dst _ ptr _ _ off _)
   (set-sse dst (sse-convert 'fconvert 64 32 (load-mem ptr off))))
 
-;; MINSD/MAXSD select the destination (rm) only on a strict order; an
-;; unordered or equal pair selects the source (rn).  Only the low double
+;; MIN/MAX select the destination (rm) only on a strict order; an
+;; unordered or equal pair selects the source (rn).  Only the low lane
 ;; is written.
-(defun MINSDrr_Int (rd rm rn)
-  (set-sse rd (cast-low 64 (if (ieee754-forder 64 rm rn) rm rn))))
+(defun sse-min (rt rd rm rn)
+  (set-sse rd (cast-low rt (if (ieee754-forder rt rm rn) rm rn))))
 
-(defun MAXSDrr_Int (rd rm rn)
-  (set-sse rd (cast-low 64 (if (ieee754-forder 64 rn rm) rm rn))))
+(defun sse-max (rt rd rm rn)
+  (set-sse rd (cast-low rt (if (ieee754-forder rt rn rm) rm rn))))
+
+(defun MINSDrr_Int (rd rm rn) (sse-min 64 rd rm rn))
+(defun MAXSDrr_Int (rd rm rn) (sse-max 64 rd rm rn))
+(defun MINSSrr_Int (rd rm rn) (sse-min 32 rd rm rn))
+(defun MAXSSrr_Int (rd rm rn) (sse-max 32 rd rm rn))
+
+(defun MINSDrm_Int (rd rm ptr _ _ off _)
+  (sse-min 64 rd rm (load-bits 64 (ea ptr off))))
+(defun MAXSDrm_Int (rd rm ptr _ _ off _)
+  (sse-max 64 rd rm (load-bits 64 (ea ptr off))))
+(defun MINSSrm_Int (rd rm ptr _ _ off _)
+  (sse-min 32 rd rm (load-bits 32 (ea ptr off))))
+(defun MAXSSrm_Int (rd rm ptr _ _ off _)
+  (sse-max 32 rd rm (load-bits 32 (ea ptr off))))
+
+;; COMIS differs from UCOMIS only in signaling on a quiet NaN, which is
+;; not modeled; the flags are the same.
+(defun COMISDrr (rn rm) (fp-compare 64 rn rm))
+(defun COMISSrr (rn rm) (fp-compare 32 rn rm))
+(defun COMISDrm (rn ptr _ _ off _) (fp-compare 64 rn ptr off))
+(defun COMISSrm (rn ptr _ _ off _) (fp-compare 32 rn ptr off))
+
+;; CMPSS/CMPSD: the predicate (imm8[2:0]) of the low lanes, as an
+;; all-ones or all-zeros mask in the destination's low lane.
+(defun sse-cmp-predicate (rt cc a b)
+  (let ((nan-a (ieee754-is-nan rt a))
+        (nan-b (ieee754-is-nan rt b))
+        (lt (ieee754-forder rt a b))
+        (gt (ieee754-forder rt b a))
+        (nan (logor nan-a nan-b)))
+    (case (logand cc 7)
+      0 (not nan lt gt)
+      1 lt
+      2 (logor lt (not nan lt gt))
+      3 nan
+      4 (logor nan lt gt)
+      5 (not lt)
+      6 (not lt (not nan lt gt))
+      7 (not nan))))
+
+(defun sse-cmp (rt rd a b cc)
+  (let ((zero (cast-low rt 0)))
+    (set-sse rd (if (sse-cmp-predicate rt cc a b) (lnot zero) zero))))
+
+(defun CMPSDrri_Int (rd rm rn cc) (sse-cmp 64 rd rm rn cc))
+(defun CMPSSrri_Int (rd rm rn cc) (sse-cmp 32 rd rm rn cc))
+(defun CMPSDrmi_Int (rd rm ptr _ _ off _ cc)
+  (sse-cmp 64 rd rm (load-bits 64 (ea ptr off)) cc))
+(defun CMPSSrmi_Int (rd rm ptr _ _ off _ cc)
+  (sse-cmp 32 rd rm (load-bits 32 (ea ptr off)) cc))
+
+;; SQRTSS/SQRTSD: the square root of the source's low lane.
+(defun sse-unary (name rt rn)
+  (if (is-symbol *sse-rmode*)
+      (intrinsic
+       (symbol-concat name *sse-rmode* *sse-format* :sep '_)
+       (coerce rt rn)
+       :result rt)
+    (case *sse-rmode*
+      +rne+ (with-rmode 'rne (sse-unary name rt rn))
+      +rtn+ (with-rmode 'rtn (sse-unary name rt rn))
+      +rtp+ (with-rmode 'rtp (sse-unary name rt rn))
+      +rtz+ (with-rmode 'rtz (sse-unary name rt rn)))))
+
+(defun SQRTSDr_Int (rd _ rn) (set-sse rd (sse-unary 'fsqrt 64 rn)))
+(defun SQRTSSr_Int (rd _ rn) (set-sse rd (sse-unary 'fsqrt 32 rn)))
+(defun SQRTSDm_Int (rd _ ptr _ _ off _)
+  (set-sse rd (sse-unary 'fsqrt 64 (load-bits 64 (ea ptr off)))))
+(defun SQRTSSm_Int (rd _ ptr _ _ off _)
+  (set-sse rd (sse-unary 'fsqrt 32 (load-bits 32 (ea ptr off)))))
 
 (defun MFENCE ()
   (intrinsic 'mfence))
