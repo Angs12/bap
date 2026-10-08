@@ -143,18 +143,18 @@
         (hi (sse-convert 'fconvert 64 32 (extract 63 32 src))))
     (set-sse dst (concat hi lo))))
 
+;; The 32-bit integer source forms: a doubleword operand, signed.
 (defun CVTSI2SSrm_Int (dst _ ptr _ _ off _)
-  (set-sse dst (sse-convert 'cast_sfloat 32 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sfloat 32 32 (load-bits 32 (ea ptr off)))))
 
 (defun CVTSI2SDrm_Int (dst _ ptr _ _ off _)
-  (set-sse dst (sse-convert 'cast_sfloat 64 64 (load-mem ptr off))))
+  (set-sse dst (sse-convert 'cast_sfloat 64 32 (load-bits 32 (ea ptr off)))))
 
 (defun CVTSI2SSrr_Int (dst _ src)
-  (set-sse dst (sse-convert 'cast_sfloat 32 64 src)))
-
+  (set-sse dst (sse-convert 'cast_sfloat 32 32 src)))
 
 (defun CVTSI2SDrr_Int (dst _ src)
-  (set-sse dst (sse-convert 'cast_sfloat 64 64 src)))
+  (set-sse dst (sse-convert 'cast_sfloat 64 32 src)))
 
 (defun CVTSD2SSrr_Int (dst _ src)
   (set-sse dst (sse-convert 'fconvert 32 64 src)))
