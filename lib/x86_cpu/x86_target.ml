@@ -269,6 +269,12 @@ module M64 = struct
   let rx = array r64 "R" 8
       ~index:(fun i -> string_of_int (i+8))
 
+  let rx_sub t suffix = array t "R" 8
+      ~index:(fun i -> string_of_int (i+8) ^ suffix)
+  let rxd = rx_sub r32 "D"
+  let rxw = rx_sub r16 "W"
+  let rxb = rx_sub r8 "B"
+
   let stx = M32.stx
   let mmx = M32.mmx
   let xmmx = array r128 "XMM" 16
@@ -280,7 +286,8 @@ module M64 = struct
   let mems = Theory.Mem.define r64 r8
   let data = Theory.Var.define mems "mem"
 
-  let aliases = M32.aliases @< M32.main @< M32.index @< xmmx
+  let aliases = M32.aliases @< M32.main @< M32.index @<
+                rxd @< rxw @< rxb @< xmmx
 
   let vars = main @< index @< segment @< rx @< stx @< mmx @< ymmx @<
              flags @< [data] @< [mxsr]
@@ -299,6 +306,9 @@ module M64 = struct
   let aliasing = M32.aliasing @
                  lo_bits_of main are M32.main @
                  lo_bits_of index are M32.index @
+                 lo_bits_of rx are rxd @
+                 lo_bits_of rxd are rxw @
+                 lo_bits_of rxw are rxb @
                  lo_bits_of ymmx are xmmx @
                  lo_bits_of [rflags] are [M16.eflags]
 end
