@@ -15,9 +15,9 @@
 ;; effective address of the operand after it increments the ESP register.
 ;; The POP ESP instruction increments the stack pointer (ESP) before data
 ;; at the old top of stack is written into the destination.
-(defun POP64rmm (ptr _ _ _ _)
+(defun POP64rmm (ptr sc ix off _)
   (+= RSP 8)
-  (store-word ptr (load-word (- RSP 8))))
+  (store-word (ea ptr sc ix off) (load-word (- RSP 8))))
 
 (defun is-rip (reg)
   (= (symbol reg) 'RIP))
@@ -30,17 +30,22 @@
 (defun is-eip (reg)
   (= (symbol reg) 'EIP))
 
-;; The effective address [reg + off].  An addr32 IP-relative operand
-;; (EIP base) wraps the sum to 32 bits and zero-extends it.
-(defun ea (reg off)
-  (if (is-eip reg)
+;; An absent base or index operand arrives as the Nil register.
+(defun is-nil (reg)
+  (= (symbol reg) 'Nil))
+
+(defun index# (scale index)
+  (if (is-nil index) 0 (* scale index)))
+
+;; The effective address [base + index*scale + off] of a memory operand
+;; (base scale index disp segment).  An addr32 IP-relative operand (EIP
+;; base) wraps the sum to 32 bits and zero-extends it.
+(defun ea (base scale index off)
+  (if (is-eip base)
       (cast-unsigned 64
         (cast-low 32
           (+ (get-program-counter) (get-instruction-length) off)))
-    (+ (reg# reg) off)))
-
-(defun load-mem (reg off)
-  (load-word (ea reg off)))
+    (+ (if (is-nil base) 0 (reg# base)) (index# scale index) off)))
 
 
 ;; shufps (shuffle packed single precision floating-point values)
@@ -49,8 +54,8 @@
 (defun SHUFPSrri (dst _ src ctl)
   (shufps dst src ctl))
 
-(defun SHUFPSrmi (dst _ base _  _ off _ ctl)
-  (let ((src (load-dword (+ base off))))
+(defun SHUFPSrmi (dst _ base sc ix off _ ctl)
+  (let ((src (load-dword (ea base sc ix off))))
     (shufps dst src ctl)))
 
 (defun shufps (dst src ctl)
@@ -125,43 +130,43 @@
 (defun PMULDQrr (dst _ src)
   (pmul set$ cast-signed dst src))
 
-(defun PMULDQrm (dst _ base _ _ off _)
-  (let ((src (load-dword (+ base off))))
+(defun PMULDQrm (dst _ base sc ix off _)
+  (let ((src (load-dword (ea base sc ix off))))
     (pmul set$ cast-signed dst src)))
 
 (defun PMULUDQrr (dst _ src)
   (pmul set$ cast-unsigned dst src))
 
-(defun PMULUDQrm (dst _ base _ _ off _)
-  (let ((src (load-dword (+ base off))))
+(defun PMULUDQrm (dst _ base sc ix off _)
+  (let ((src (load-dword (ea base sc ix off))))
     (pmul set$ cast-unsigned dst src)))
 
 (defun VPMULDQrr (dst _ src)
   (pmul setv cast-signed dst src))
 
-(defun VPMULDQrm (dst _ base _ _ off _)
-  (let ((src (load-dword (+ base off))))
+(defun VPMULDQrm (dst _ base sc ix off _)
+  (let ((src (load-dword (ea base sc ix off))))
     (pmul setv cast-signed dst src)))
 
 (defun VPMULUDQrr (dst _ src)
   (pmul setv cast-unsigned dst src))
 
-(defun VPMULUDQrm (dst _ base _ _ off _)
-  (let ((src (load-dword (+ base off))))
+(defun VPMULUDQrm (dst _ base sc ix off _)
+  (let ((src (load-dword (ea base sc ix off))))
     (pmul setv cast-unsigned dst src)))
 
 (defun VPMULDQYrr (dst _ src)
   (pmuly cast-signed dst src))
 
-(defun VPMULDQYrm (dst _ base _ _ off _)
-  (let ((src (load-dword (+ base off))))
+(defun VPMULDQYrm (dst _ base sc ix off _)
+  (let ((src (load-dword (ea base sc ix off))))
     (pmuly cast-signed dst src)))
 
 (defun VPMULUDQYrr (dst _ src)
   (pmuly cast-unsigned dst src))
 
-(defun VPMULUDQYrm (dst _ base _ _ off _)
-  (let ((src (load-dword (+ base off))))
+(defun VPMULUDQYrm (dst _ base sc ix off _)
+  (let ((src (load-dword (ea base sc ix off))))
     (pmuly cast-unsigned dst src)))
 
 (defmacro pmul (set cast dst src)
@@ -190,8 +195,8 @@
 (defun PACKSSDWrr (dst _ src)
   (packsdw/128 :signed dst dst src))
 
-(defun PACKSSDWrm (dst _ base _ _ off _)
-  (let ((src (load-dword (+ base off))))
+(defun PACKSSDWrm (dst _ base sc ix off _)
+  (let ((src (load-dword (ea base sc ix off))))
     (packsdw/128 :signed dst dst src)))
 
 (defun VPACKSSDWrr (dst src1 src2)
@@ -200,20 +205,20 @@
 (defun VPACKSSDWYrr (dst src1 src2)
   (packsdw/256 :signed dst src1 src2))
 
-(defun VPACKSSDWrm (dst src1 base _ _ off _)
-  (let ((src2 (load-dword (+ base off))))
+(defun VPACKSSDWrm (dst src1 base sc ix off _)
+  (let ((src2 (load-dword (ea base sc ix off))))
     (packsdw/128 :signed dst src1 src2)))
 
-(defun VPACKSSDWYrm (dst src1 base _ _ off _)
-  (let ((src2 (load-qword (+ base off))))
+(defun VPACKSSDWYrm (dst src1 base sc ix off _)
+  (let ((src2 (load-qword (ea base sc ix off))))
     (packsdw/256 :signed dst src1 src2)))
 
 
 (defun PACKUSDWrr (dst _ src)
   (packsdw/128 :unsigned dst dst src))
 
-(defun PACKUSDWrm (dst _ base _ _ off _)
-  (let ((src (load-dword (+ base off))))
+(defun PACKUSDWrm (dst _ base sc ix off _)
+  (let ((src (load-dword (ea base sc ix off))))
     (packsdw/128 :unsigned dst dst src)))
 
 (defun VPACKUSDWrr (dst src1 src2)
@@ -222,12 +227,12 @@
 (defun VPACKUSDWYrr (dst src1 src2)
   (packsdw/256 :unsigned dst src1 src2))
 
-(defun VPACKUSDWrm (dst src1 base _ _ off _)
-  (let ((src2 (load-dword (+ base off))))
+(defun VPACKUSDWrm (dst src1 base sc ix off _)
+  (let ((src2 (load-dword (ea base sc ix off))))
     (packsdw/128 :unsigned dst src1 src2)))
 
-(defun VPACKUSDWYrm (dst src1 base _ _ off _)
-  (let ((src2 (load-qword (+ base off))))
+(defun VPACKUSDWYrm (dst src1 base sc ix off _)
+  (let ((src2 (load-qword (ea base sc ix off))))
     (packsdw/256 :unsigned dst src1 src2)))
 
 (defun packsdw/128 (kind dst src1 src2)
@@ -271,16 +276,16 @@
 (defun VPACKSSWBYrr (dst src1 src2)
   (packswb/256 :signed dst src1 src2))
 
-(defun PACKSSWBrm (dst _ base _ _ off _)
-  (let ((src (load-dword (+ base off))))
+(defun PACKSSWBrm (dst _ base sc ix off _)
+  (let ((src (load-dword (ea base sc ix off))))
     (packswb/128 :signed dst dst src)))
 
-(defun VPACKSSWBrm (dst src1 base _ _ off _)
-  (let ((src2 (load-dword (+ base off))))
+(defun VPACKSSWBrm (dst src1 base sc ix off _)
+  (let ((src2 (load-dword (ea base sc ix off))))
     (packswb/128 :signed dst src1 src2)))
 
-(defun VPACKSSWBYrm (dst src1 base _ _ off _)
-  (let ((src2 (load-qword (+ base off))))
+(defun VPACKSSWBYrm (dst src1 base sc ix off _)
+  (let ((src2 (load-qword (ea base sc ix off))))
     (packswb/128 :signed dst src1 src2)))
 
 
@@ -293,16 +298,16 @@
 (defun VPACKUSWBYrr (dst src1 src2)
   (packswb/256 :unsigned dst src1 src2))
 
-(defun PACKUSWBrm (dst _ base _ _ off _)
-  (let ((src (load-dword (+ base off))))
+(defun PACKUSWBrm (dst _ base sc ix off _)
+  (let ((src (load-dword (ea base sc ix off))))
     (packswb/128 :unsigned dst dst src)))
 
-(defun VPACKUSWBrm (dst src1 base _ _ off _)
-  (let ((src2 (load-dword (+ base off))))
+(defun VPACKUSWBrm (dst src1 base sc ix off _)
+  (let ((src2 (load-dword (ea base sc ix off))))
     (packswb/128 :unsigned dst src1 src2)))
 
-(defun VPACKUSWBYrm (dst src1 base _ _ off _)
-  (let ((src2 (load-qword (+ base off))))
+(defun VPACKUSWBYrm (dst src1 base sc ix off _)
+  (let ((src2 (load-qword (ea base sc ix off))))
     (packswb/128 :unsigned dst src1 src2)))
 
 (defun packswb/128 (kind dst src1 src2)
@@ -378,18 +383,18 @@
   (set$ reg (concat 0:128 (cast-low 128 (unquote reg)))))
 
 ;; MOVNTDQ - Store packed Integers Using Non-Temporal Hint
-(defun MOVNTDQmr (base _ _ off _ src)
-  (non-temporal-store-word base off src))
+(defun MOVNTDQmr (base sc ix off _ src)
+  (non-temporal-store-word base sc ix off src))
 
-(defun VMOVNTDQmr (base _ _ off _ src)
-  (non-temporal-store-word base off src))
+(defun VMOVNTDQmr (base sc ix off _ src)
+  (non-temporal-store-word base sc ix off src))
 
-(defun VMOVNTDQYmr (base _ _ off _ src)
-  (non-temporal-store-word base off src))
+(defun VMOVNTDQYmr (base sc ix off _ src)
+  (non-temporal-store-word base sc ix off src))
 
 ;; to be overriden by specialized analyses
-(defun non-temporal-store-word (base off src)
-  (store-word (+ base off) src))
+(defun non-temporal-store-word (base sc ix off src)
+  (store-word (ea base sc ix off) src))
 
 ;; [v]andp{s,d}
 (defun ANDPSrr (rd rn rm)
@@ -407,23 +412,23 @@
 (defun VANDPDYrr (rd rn rm)
   (bitwise-rrr set$ ident logand rd rn rm))
 
-(defun ANDPSrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logand rd rn ptr off))
+(defun ANDPSrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logand rd rn ptr sc ix off))
 
-(defun ANDPDrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logand rd rn ptr off))
+(defun ANDPDrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logand rd rn ptr sc ix off))
 
-(defun VANDPSrm (rd rn ptr _ _ off _)
-  (bitwise-rrm setv ident logand rd rn ptr off))
+(defun VANDPSrm (rd rn ptr sc ix off _)
+  (bitwise-rrm setv ident logand rd rn ptr sc ix off))
 
-(defun VANDPDrm (rd rn ptr _ _ off _)
-  (bitwise-rrm setv ident logand rd rn ptr off))
+(defun VANDPDrm (rd rn ptr sc ix off _)
+  (bitwise-rrm setv ident logand rd rn ptr sc ix off))
 
-(defun VANDPSYrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logand rd rn ptr off))
+(defun VANDPSYrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logand rd rn ptr sc ix off))
 
-(defun VANDPDYrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logand rd rn ptr off))
+(defun VANDPDYrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logand rd rn ptr sc ix off))
 
 ;; [v]orp{s,d}
 (defun ORPSrr (rd rn rm)
@@ -441,23 +446,23 @@
 (defun VORPDYrr (rd rn rm)
   (bitwise-rrr set$ ident logor rd rn rm))
 
-(defun ORPSrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logor rd rn ptr off))
+(defun ORPSrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logor rd rn ptr sc ix off))
 
-(defun ORPDrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logor rd rn ptr off))
+(defun ORPDrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logor rd rn ptr sc ix off))
 
-(defun VORPSrm (rd rn ptr _ _ off _)
-  (bitwise-rrm setv ident logor rd rn ptr off))
+(defun VORPSrm (rd rn ptr sc ix off _)
+  (bitwise-rrm setv ident logor rd rn ptr sc ix off))
 
-(defun VORPDrm (rd rn ptr _ _ off _)
-  (bitwise-rrm setv ident logor rd rn ptr off))
+(defun VORPDrm (rd rn ptr sc ix off _)
+  (bitwise-rrm setv ident logor rd rn ptr sc ix off))
 
-(defun VORPSYrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logor rd rn ptr off))
+(defun VORPSYrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logor rd rn ptr sc ix off))
 
-(defun VORPDYrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logor rd rn ptr off))
+(defun VORPDYrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logor rd rn ptr sc ix off))
 
 ;; [v]xorp{s,d}
 (defun XORPSrr (rd rn rm)
@@ -475,23 +480,23 @@
 (defun VXORPDYrr (rd rn rm)
   (bitwise-rrr set$ ident logxor rd rn rm))
 
-(defun XORPSrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logxor rd rn ptr off))
+(defun XORPSrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logxor rd rn ptr sc ix off))
 
-(defun XORPDrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logxor rd rn ptr off))
+(defun XORPDrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logxor rd rn ptr sc ix off))
 
-(defun VXORPSrm (rd rn ptr _ _ off _)
-  (bitwise-rrm setv ident logxor rd rn ptr off))
+(defun VXORPSrm (rd rn ptr sc ix off _)
+  (bitwise-rrm setv ident logxor rd rn ptr sc ix off))
 
-(defun VXORPDrm (rd rn ptr _ _ off _)
-  (bitwise-rrm setv ident logxor rd rn ptr off))
+(defun VXORPDrm (rd rn ptr sc ix off _)
+  (bitwise-rrm setv ident logxor rd rn ptr sc ix off))
 
-(defun VXORPSYrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logxor rd rn ptr off))
+(defun VXORPSYrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logxor rd rn ptr sc ix off))
 
-(defun VXORPDYrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ ident logxor rd rn ptr off))
+(defun VXORPDYrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ ident logxor rd rn ptr sc ix off))
 
 
 ;; [v]andnp{s,d}
@@ -510,23 +515,23 @@
 (defun VANDNPDYrr (rd rn rm)
   (bitwise-rrr set$ lnot logand rd rn rm))
 
-(defun ANDNPSrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ lnot logand rd rn ptr off))
+(defun ANDNPSrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ lnot logand rd rn ptr sc ix off))
 
-(defun ANDNPDrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ lnot logand rd rn ptr off))
+(defun ANDNPDrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ lnot logand rd rn ptr sc ix off))
 
-(defun VANDNPSrm (rd rn ptr _ _ off _)
-  (bitwise-rrm setv lnot logand rd rn ptr off))
+(defun VANDNPSrm (rd rn ptr sc ix off _)
+  (bitwise-rrm setv lnot logand rd rn ptr sc ix off))
 
-(defun VANDNPDrm (rd rn ptr _ _ off _)
-  (bitwise-rrm setv lnot logand rd rn ptr off))
+(defun VANDNPDrm (rd rn ptr sc ix off _)
+  (bitwise-rrm setv lnot logand rd rn ptr sc ix off))
 
-(defun VANDNPSYrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ lnot logand rd rn ptr off))
+(defun VANDNPSYrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ lnot logand rd rn ptr sc ix off))
 
-(defun VANDNPDYrm (rd rn ptr _ _ off _)
-  (bitwise-rrm set$ lnot logand rd rn ptr off))
+(defun VANDNPDYrm (rd rn ptr sc ix off _)
+  (bitwise-rrm set$ lnot logand rd rn ptr sc ix off))
 
 (defun setv (r x)
   "(setv XMMx X) assigns X to lower bits of XMMx and zeros the upper.
@@ -537,5 +542,5 @@
 (defmacro bitwise-rrr (set opo opi rd rn rm)
   (set rd (opo (opi rn rm))))
 
-(defmacro bitwise-rrm (set opo opi rd rn ptr off)
-  (set rd (opo (opi rn (load-bits (word-width (unquote rn)) (ea ptr off))))))
+(defmacro bitwise-rrm (set opo opi rd rn ptr sc ix off)
+  (set rd (opo (opi rn (load-bits (word-width (unquote rn)) (ea ptr sc ix off))))))
