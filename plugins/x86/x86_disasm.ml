@@ -675,7 +675,10 @@ let parse_instr mode mem addr =
     | 0xf6
     | 0xf7 -> let t = if b1 = 0xf6 then reg8_t else prefix.opsize in
       let it = if Type.equal t reg64_t then reg32_t else t in
-      let (r, rm, na) = parse_modrmext_addr (Some it) na in
+      (* Only TEST has a trailing immediate in group 3. *)
+      let group = (Char.to_int (g na) lsr 3) land 7 in
+      let immediate = if group = 0 then Some it else None in
+      let (r, rm, na) = parse_modrmext_addr immediate na in
       (match r with (* Grp 3 *)
        | 0 ->
          let (imm, na) = parse_immz it na in
@@ -1100,6 +1103,8 @@ let parse_instr mode mem addr =
         | 0xc7 ->
           let r, rm, na = parse_modrmext_addr None na in
           (match r with
+           | 1 when Type.equal prefix.opsize reg64_t ->
+             unimplemented "cmpxchg16b"
            | 1 -> (Cmpxchg8b(rm), na)
            | _ -> unimplemented
                     (Printf.sprintf "unsupported opcode: %02x %02x/%d" b1 b2 r)

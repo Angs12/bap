@@ -1937,16 +1937,26 @@ let disasm_instr mode mem addr =
   let has_rex = Option.is_some prefix.rex in
   let has_vex = Option.is_some prefix.vex in
   let ss, pref = D.parse_prefixes mode pref op in
-  let bil = ToIR.to_ir mode addr na ss pref has_rex has_vex op in
-  if xchg_memory op && not (X86_prefix.exists `xF0 mem)
-  then X86_tools_prefix.lock bil
-  else bil
+  if X86_prefix.exists `xF0 mem || xchg_memory op then
+    X86_atomic.lift
+      ~read:(ToIR.op2e_s mode ss has_rex)
+      ~write:(ToIR.assn_s mode ss has_rex has_vex)
+      ~add_flags:ToIR.set_flags_add ~sub_flags:ToIR.set_flags_sub
+      ~inc_flags:ToIR.set_aopszf_add ~dec_flags:ToIR.set_aopszf_sub
+      ~logic_flags:(fun w _ _ result ->
+          Bil.[Move (oF, Int (Word.zero 1)); Move (cf, Int (Word.zero 1));
+               Move (af, Unknown ("undefined logical AF", Type.Imm 1))]
+          @ ToIR.set_pszf (Type.Imm w) result)
+      op
+  else ToIR.to_ir mode addr na ss pref has_rex has_vex op
 
 let insn arch mem insn =
   let mode = match arch with `x86 -> X86 | `x86_64 -> X8664 in
   let addr = Memory.min_addr mem in
   match disasm_instr mode mem addr with
-  | exception No_semantics -> Ok []
+  | exception No_semantics ->
+      if X86_prefix.exists `xF0 mem then Or_error.error_string "unsupported locked instruction"
+      else Ok []
   | exception Arch_exception (_, msg) ->
       Or_error.errorf "invalid instruction: %s" msg
   | exception exn ->

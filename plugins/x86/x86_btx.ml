@@ -68,6 +68,17 @@ module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
           List.concat [flags; side] in
         Ok bil)
 
+  let atomic_bits op ~address ~size ~offset =
+    let bits = Size.in_bits size in
+    let mask = Bil.(int (Word.one bits) lsl cast unsigned bits offset) in
+    let name,value = match op with
+      | #btc -> "xor",mask
+      | #btr -> "and",Bil.UnOp (Bil.NOT,mask)
+      | #bts -> "or",mask
+      | #bt -> invalid_arg "LOCK BT is invalid" in
+    let pre,old = X86_atomic.rmw ~op:name ~address ~bits value in
+    pre @ set_flags op old offset
+
   let btx_mi (op:btx_mi) =
     X86_operands.mi ~f:(fun mem ~seg ~base ~scale ~index ~disp offset ->
         let base_mem = MM.of_mem mem ~seg ~base ~scale ~index ~disp in
@@ -88,7 +99,9 @@ module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
               (mask_imm size o)
               (fun exp -> MM.store_to Bil.(var a) ~size exp) in
           List.concat [load; flag; side] in
-        Ok bil)
+        if X86_prefix.exists `xF0 mem then
+          Ok (atomic_bits op ~address:(MM.addr base_mem) ~size ~offset:(Bil.int o))
+        else Ok bil)
 
   let btx_mr (op:btx_mr) =
     X86_operands.mr ~f:(fun mem ~seg ~base ~scale ~index ~disp offset ->
@@ -123,7 +136,17 @@ module Make (Tools : X86_tools.S) (Backend : X86_backend.S) = struct
               (mask_reg size o)
               (fun exp -> MM.store_to Bil.(var a + var b) ~size exp) in
           List.concat [load; flags; side] in
-        Ok bil)
+        if X86_prefix.exists `xF0 mem then
+          let shift = match size with `r16 -> 4 | `r32 -> 5 | `r64 -> 6
+            | _ -> invalid_arg "atomic bit width" in
+          let off = RR.get offset in
+          let words = Bil.BinOp (Bil.ARSHIFT,off,Bil.int (Word.of_int ~width:bsize shift)) in
+          let displacement = Bil.(cast signed bsize_addr words *
+                                   int (Word.of_int ~width:bsize_addr (Size.in_bytes size))) in
+          let address = Bil.(MM.addr base_mem + displacement) in
+          let offset = Bil.Cast (Bil.LOW,w,off) in
+          Ok (atomic_bits op ~address ~size ~offset)
+        else Ok bil)
 
   let btx (op:btx) =
     match op with

@@ -17,7 +17,7 @@ module type S = sig
   module Make (T : Target) : Target
 end
 
-module Make (PR : PR) = struct
+module Make (Locked : sig val lift : lifter end) = struct
 
   let lifts : lifter Table.t = Hashtbl.create (module String)
 
@@ -31,14 +31,16 @@ module Make (PR : PR) = struct
       Option.value ~default:T.lift (Hashtbl.find tab (Insn.name insn))
 
     let lift mem insn =
-      let lift = search lifts insn in
+      let lift =
+        if X86_prefix.exists `xF0 mem
+           && not (String.is_prefix (Insn.name insn) ~prefix:"BT") then
+          Locked.lift
+        else search lifts insn in
       try match lift mem insn with
         | Error err -> Error err
         | Ok bil as ok -> match Type.check bil with
           | Ok () ->
-            if X86_prefix.exists `xF0 mem
-            then Ok (PR.lock bil)
-            else ok
+            ok
           | Error te ->
             warning "BIL is not well-typed %a - %a"
               X86_utils.pp_insn (mem,insn) Type.Error.pp te;
@@ -54,5 +56,5 @@ module Make (PR : PR) = struct
   end
 end
 
-module IA32 = Make (X86_tools.IA32.PR)
-module AMD64 = Make (X86_tools.AMD64.PR)
+module IA32 = Make (X86_lifter.IA32)
+module AMD64 = Make (X86_lifter.AMD64)

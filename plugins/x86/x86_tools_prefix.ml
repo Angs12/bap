@@ -2,15 +2,8 @@ open Core_kernel[@@warning "-D"]
 open Bap.Std
 open X86_tools_types
 
-let lock bil =
-  Bil.(encode intrinsic "x86:lock") :: bil @ [
-    Bil.(encode intrinsic "x86:unlock")
-  ]
-
 module Make (RR : RR) (FR : FR) (IV : IV) : PR = struct
   type t = X86_prefix.t [@@deriving sexp, compare]
-
-  let lock = lock
 
   module Rep = struct
     let rcx =
