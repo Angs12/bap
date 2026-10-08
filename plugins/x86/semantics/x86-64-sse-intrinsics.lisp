@@ -169,12 +169,13 @@
   (set-sse dst (sse-convert 'fconvert 64 32 (load-mem ptr off))))
 
 ;; MINSD/MAXSD select the destination (rm) only on a strict order; an
-;; unordered or equal pair selects the source (rn).
+;; unordered or equal pair selects the source (rn).  Only the low double
+;; is written.
 (defun MINSDrr_Int (rd rm rn)
-  (set-sse rd (if (ieee754-forder 64 rm rn) rm rn)))
+  (set-sse rd (cast-low 64 (if (ieee754-forder 64 rm rn) rm rn))))
 
 (defun MAXSDrr_Int (rd rm rn)
-  (set-sse rd (if (ieee754-forder 64 rn rm) rm rn)))
+  (set-sse rd (cast-low 64 (if (ieee754-forder 64 rn rm) rm rn))))
 
 (defun MFENCE ()
   (intrinsic 'mfence))
