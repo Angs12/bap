@@ -1847,7 +1847,16 @@ module ToIR = struct
         let tdiv = tmp ~name:"div" dt in
         let trem = tmp ~name:"rem" dt in
         let result = Bil.(cast low !!t (var trem) ^ cast low !!t (var tdiv)) in
-        let apply_result = fst (assn_dbl t result) in
+        let apply_result =
+          match op_dbl t with
+          | [ (th, oh); (tl, ol) ] ->
+              Bil.
+                [
+                  assn th oh (cast low !!th (var trem));
+                  assn tl ol (cast low !!tl (var tdiv));
+                ]
+          | _ -> fst (assn_dbl t result)
+        in
         Bil.
           [
             divisor := cast unsigned !!dt (op2e t src);
@@ -1875,7 +1884,16 @@ module ToIR = struct
         let tdiv = tmp ~name:"div" dt in
         let trem = tmp ~name:"rem" dt in
         let result = Bil.(cast low !!t (var trem) ^ cast low !!t (var tdiv)) in
-        let apply_result = fst @@ assn_dbl t result in
+        let apply_result =
+          match op_dbl t with
+          | [ (th, oh); (tl, ol) ] ->
+              Bil.
+                [
+                  assn th oh (cast low !!th (var trem));
+                  assn tl ol (cast low !!tl (var tdiv));
+                ]
+          | _ -> fst (assn_dbl t result)
+        in
         let lbound =
           let dtm1 = dt' - 1 in
           Word.(one dt' lsl of_int ~width:dt' dtm1)
