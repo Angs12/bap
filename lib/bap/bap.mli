@@ -7661,6 +7661,8 @@ module Std : sig
       *)
       val scan : mem -> state -> state knowledge
 
+      val resume : ?record:bool -> Set.M(Addr).t -> mem -> state -> state knowledge
+
 
       (** [explore ~block ~node ~edge ~init state] builds a
           control-flow graph from the [state].

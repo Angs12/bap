@@ -633,7 +633,7 @@ let valid_dsts data dsts =
   then None
   else Some {dsts with resolved}
 
-let scan_step ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
+let scan_step ?(record=true) ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
   disassemble ~code ~data ~funs s.debt mem >>=
   fun {Machine.begs; jmps; data; debt; dels} ->
   let data = Set.union s.data data in
@@ -644,8 +644,12 @@ let scan_step ?(code=empty) ?(data=empty) ?(funs=empty) s mem =
       | `Left dsts -> valid_dsts data dsts
       | `Right dsts -> Some dsts
       | `Both (d1,d2) -> valid_dsts data (merge_dests d1 d2)) in
-  let begs = Set.of_map_keys begs -- data in
-  let funs = s.funs ++ funs ++ funs' -- data -- dels in
+  let begs =
+    if record then Set.of_map_keys begs -- data
+    else Set.of_map_keys begs -- data -- funs in
+  let funs =
+    if record then s.funs ++ funs ++ funs' -- data -- dels
+    else s.funs ++ funs' -- data -- dels in
   let begs = Set.union s.begs begs -- dels in
   {funs; begs; data; jmps; mems = s.mems; debt; exts = s.exts ++ exts}
 
@@ -667,6 +671,9 @@ let scan mem s =
           else !!s)
       ~init:{s with mems = mem :: s.mems}
 
+
+let resume ?(record=false) starts mem s =
+  scan_step ~record ~data:s.data ~funs:starts s mem
 
 let merge t1 t2 = {
   funs = Set.union t1.funs t2.funs;
