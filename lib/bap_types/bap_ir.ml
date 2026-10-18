@@ -874,6 +874,8 @@ module Ir_jmp = struct
     | Direct tid -> Some (Resolved tid)
     | Indirect exp -> match Bap_helpers.Type.infer_exn exp with
       | Imm len -> Some (Indirect {vec = Rhs.of_exp exp; len})
+      | Mem (addr, _) ->
+        Some (Indirect {vec = Rhs.of_exp exp; len = Bap_size.in_bits addr})
       | _ -> None
 
   let lbl_of_dst : Jmp.dst -> label = function
