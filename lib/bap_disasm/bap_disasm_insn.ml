@@ -63,8 +63,20 @@ module Props = struct
     List.map !known_properties ~f:(fun p ->
         name p, has props p)
 
-  let domain = KB.Domain.flat "props"
-      ~empty:Z.one ~equal:Z.equal
+  let domain_empty = Z.one
+  let domain = KB.Domain.define "props"
+      ~empty:domain_empty
+      ~order:(fun x y : KB.Order.partial ->
+          if Z.equal x y then EQ
+          else if Z.equal x domain_empty then LT
+          else if Z.equal y domain_empty then GT
+          else if Z.equal (Z.logand x y) x then LT
+          else if Z.equal (Z.logand x y) y then GT
+          else NC)
+      ~join:(fun x y ->
+          if Z.equal x domain_empty then Ok y
+          else if Z.equal y domain_empty then Ok x
+          else Ok (Z.logor x y))
       ~inspect:(fun props ->
           [%sexp_of: (string * bool) list]
             (assoc_of_props props))
