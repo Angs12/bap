@@ -290,6 +290,7 @@ module M64 = struct
   let xmmx = array r128 "XMM" 32
   let ymmx = array r256 "YMM" 32
   let mxsr = reg r32 "MXCSR"
+  let fpcw = reg r16 "FPU_CONTROL"
 
   let flags = M32.flags
   let rflags = reg r64 "RFLAGS"
@@ -300,7 +301,7 @@ module M64 = struct
                 rxd @< rxw @< rxb @< egprd @< egprw @< egprb @< xmmx
 
   let vars = main @< index @< segment @< rx @< egpr @< stx @< mmx @< ymmx @<
-             flags @< [data] @< [mxsr]
+             flags @< [data] @< [mxsr] @< [fpcw]
 
   let regs =  Theory.Role.Register.[
       [general; integer], main @< index @< segment @< rx @< egpr;
@@ -309,7 +310,7 @@ module M64 = struct
       [frame_pointer], untyped [reg r64 "RBP"];
       [Role.index], untyped index;
       [Role.segment], untyped segment;
-      [status], untyped [mxsr];
+      [status], untyped [mxsr] @ untyped [fpcw];
       [alias], aliases;
     ] @ M16.flag_roles
 
